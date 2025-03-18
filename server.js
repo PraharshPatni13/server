@@ -3,6 +3,7 @@ const mysql = require('mysql2');
 const cors = require("cors");
 const app = express();
 require('dotenv').config();
+const fs = require('fs');
 
 const shrey11_ = require('./sub_part/other_rout_shrey_11');
 const praharsh_routes = require("./sub_part/praharsh_routes");
@@ -36,9 +37,15 @@ const { generate_otp, get_otp, clear_otp } = require('./modules/OTP_generate');
 
 
 
-const http = require('http');
+const https = require('https');
 const { Server } = require('socket.io');
-const server = http.createServer(app);
+const options = {
+  key: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/privkey.pem'),
+  cert: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/fullchain.pem')
+};
+const server = https.createServer(options, app).listen(() => {
+  console.log("Server is running on port 4000");
+});
 const io = new Server(server, {
   cors: {
     origin: '*',
@@ -62,7 +69,7 @@ const dbConfig = {
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  authPlugins: { },
+  authPlugins: {},
 };
 
 let db;
