@@ -3,7 +3,6 @@ const mysql = require('mysql2');
 const cors = require("cors");
 const app = express();
 require('dotenv').config();
-const fs = require('fs');
 
 const shrey11_ = require('./sub_part/other_rout_shrey_11');
 const praharsh_routes = require("./sub_part/praharsh_routes");
@@ -24,6 +23,10 @@ app.use(express.urlencoded({ extended: false, limit: '200mb' }))
 app.use(express.json());
 app.use(cors());
 
+app.use((req, res, next) => {
+  req.io = io; // Attach io to request object
+  next();
+});
 
 const { send_welcome_page, send_otp_page } = require('./modules/send_server_email');
 const { server_request_mode, write_log_file, error_message, info_message, success_message,
@@ -33,32 +36,16 @@ const { generate_otp, get_otp, clear_otp } = require('./modules/OTP_generate');
 
 
 
-const https = require('https');
+const http = require('http');
 const { Server } = require('socket.io');
-const options = {
-  key: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/privkey.pem'),
-  cert: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/fullchain.pem')
-};
-const server = https.createServer(options, app);
+const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true,
+    origin: '*',
+    methods: '*',
   },
-  transports: ["websocket", "polling"],
 });
-app.use((req, res, next) => {
-  req.io = io; // Attach io to request object
-  next();
-});
-io.on("connection", (socket) => {
-  console.log("✅ A user connected:", socket.id);
 
-  socket.on("disconnect", () => {
-    console.log("❌ A user disconnected:", socket.id);
-  });
-});
 // Move this to the top level, outside of connection handler
 const emitEventRequestNotification = (userEmail, data) => {
   io.emit(`new_event_request_notification_${userEmail}`, data);
@@ -86,7 +73,7 @@ function handleDisconnect() {
   db.connect((err) => {
     if (err) {
       console.error("Database connection failed:", err);
-      setTimeout(handleDisconnect, 5000);
+      setTimeout(handleDisconnect, 5000); // Try to reconnect after 5 sec
     } else {
       console.log("Connected to MySQL database");
     }
