@@ -42,16 +42,22 @@ const options = {
 const server = https.createServer(options, app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: '*',
+    origin: "*",
+    methods: ["GET", "POST"],
+    credentials: true,
   },
+  transports: ["websocket", "polling"],
 });
 app.use((req, res, next) => {
   req.io = io; // Attach io to request object
   next();
 });
-io.on('connection', (socket) => {
-  console.log('A user connected with ID:', socket.id);
+io.on("connection", (socket) => {
+  console.log("✅ A user connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("❌ A user disconnected:", socket.id);
+  });
 });
 // Move this to the top level, outside of connection handler
 const emitEventRequestNotification = (userEmail, data) => {
