@@ -43,9 +43,7 @@ const options = {
   key: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/privkey.pem'),
   cert: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/fullchain.pem')
 };
-const server = https.createServer(options, app).listen(() => {
-  console.log("Server is running on port 4000");
-});
+const server = https.createServer(options, app);
 const io = new Server(server, {
   cors: {
     origin: '*',
