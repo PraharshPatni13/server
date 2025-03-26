@@ -23,7 +23,7 @@ router.get('/all-data', async (req, res) => {
     const [owners] = await db.query('SELECT * FROM owner');
     const [clients] = await db.query('SELECT * FROM clients');
     const [packages] = await db.query('SELECT * FROM packages');
-    const [totalExpense] = await db.query(`SELECT * FROM 'toatl expense'`);
+    // const [totalExpense] = await db.query(`SELECT * FROM 'toatl expense'`);
 
     // Send the JSON response once data is fetched.
     res.json({
@@ -31,7 +31,7 @@ router.get('/all-data', async (req, res) => {
       totalOwners: owners.length,
       totalClients: clients.length,
       totalPackages: packages.length,
-      totalExpenses: totalExpense.length,
+      // totalExpenses: totalExpense.length,
       admins: admins,
       owners: owners,
       clients: clients,
