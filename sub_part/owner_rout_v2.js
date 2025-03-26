@@ -36,7 +36,7 @@ router.get('/all-data', async (req, res) => {
       owners: owners,
       clients: clients,
       packages: packages,
-      expenses: totalExpense
+      // expenses: totalExpense
     });
   } catch (error) {
     console.error(error);
