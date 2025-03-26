@@ -510,7 +510,6 @@ router.post("/update-business", (req, res) => {
   if (
     !business_name ||
     !business_email ||
-    !gst_number ||
     !business_address ||
     !user_email
   ) {
@@ -525,7 +524,7 @@ router.post("/update-business", (req, res) => {
 
   db.query(
     query,
-    [business_name, business_email, gst_number, business_address, user_email],
+    [business_name, business_email, gst_number , business_address, user_email],
     (err, result) => {
       if (err) {
         console.error("Error updating business data:", err);
