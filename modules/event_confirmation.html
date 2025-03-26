@@ -6,73 +6,120 @@
     <title>Event Confirmation</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
             margin: 0;
             padding: 0;
-            background-color: #f4f4f4;
+            background-color: #f5f5f5;
         }
-        .email-container {
-            width: 100%;
+        .container {
             max-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            padding: 20px;
+            margin: 20px auto;
+            background: #ffffff;
             border-radius: 10px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
         }
-        .email-header {
-            text-align: center;
-            padding: 10px;
-            background-color: #0073e6;
-            color: #ffffff;
-            border-radius: 5px;
-        }
-        .email-body {
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
             padding: 20px;
-            font-size: 16px;
-            line-height: 1.5;
-            color: #333333;
+            text-align: center;
         }
-        .email-body h2 {
-            color: #0073e6;
+        .content {
+            padding: 30px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 10px;
         }
         .event-details {
-            background-color: #f1f1f1;
-            padding: 15px;
-            font-size: 16px;
-            border-radius: 5px;
-            margin-top: 20px;
+            background: #f8f9fa;
+            border: 2px dashed #3498db;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .event-detail-item {
+            margin: 10px 0;
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .event-detail-item:last-child {
+            border-bottom: none;
+        }
+        .event-detail-label {
+            color: #666;
+            font-weight: 500;
+        }
+        .event-detail-value {
+            color: #2c3e50;
+            font-weight: 600;
         }
         .footer {
+            background: #f8f9fa;
+            padding: 20px;
             text-align: center;
-            font-size: 12px;
-            color: #888888;
-            margin-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .cta-button {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 12px 25px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 20px 0;
         }
     </style>
 </head>
 <body>
-    <div class="email-container">
-        <div class="email-header">
-            <h1>Event Confirmation</h1>
+    <div class="container">
+        <div class="header">
+            <div class="logo">WeddingWhisper</div>
+            <h1 style="margin: 0; font-size: 24px;">Event Confirmation</h1>
         </div>
-        <div class="email-body">
-            <h2>Hello,</h2>
+        <div class="content">
+            <h2 style="color: #2c3e50; margin-top: 0;">Hello,</h2>
             <p>Thank you for confirming your participation in our event! We are excited to have you with us.</p>
-            <p>Here are the event details:</p>
+            
             <div class="event-details">
-                <p><strong>Event Name:</strong> {event_name}</p>
-                <p><strong>Start:</strong> {event_start}</p>
-                <p><strong>End:</strong> {event_end}</p>
-                <p><strong>Venue:</strong> {event_location}</p>
-                <p><strong>Organizer:</strong> {organizer_name}</p>
-
+                <div class="event-detail-item">
+                    <span class="event-detail-label">Event Name:</span>
+                    <span class="event-detail-value">{event_name}</span>
+                </div>
+                <div class="event-detail-item">
+                    <span class="event-detail-label">Start:</span>
+                    <span class="event-detail-value">{event_start}</span>
+                </div>
+                <div class="event-detail-item">
+                    <span class="event-detail-label">End:</span>
+                    <span class="event-detail-value">{event_end}</span>
+                </div>
+                <div class="event-detail-item">
+                    <span class="event-detail-label">Venue:</span>
+                    <span class="event-detail-value">{event_location}</span>
+                </div>
+                <div class="event-detail-item">
+                    <span class="event-detail-label">Organizer:</span>
+                    <span class="event-detail-value">{organizer_name}</span>
+                </div>
             </div>
+
             <p>We hope you have a fantastic time and enjoy every moment of the event!</p>
-            <p>If you have any questions or special requests, feel free to contact us.</p>
+            
+            <div style="text-align: center;">
+                <a href="mailto:weddingwhisper3@gmail.com" class="cta-button">Contact Us</a>
+            </div>
         </div>
         <div class="footer">
-            <p>&copy; 2024 Your Company Name. All rights reserved.</p>
+            <p style="margin: 0; color: #666; font-size: 14px;">© 2024 WeddingWhisper. All rights reserved.</p>
         </div>
     </div>
 </body>
