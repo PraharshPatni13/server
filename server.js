@@ -24,6 +24,12 @@ app.use(express.urlencoded({ extended: false, limit: '200mb' }))
 app.use(express.json());
 app.use(cors());
 
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
+
 
 const { send_welcome_page, send_otp_page } = require('./modules/send_server_email');
 const { server_request_mode, write_log_file, error_message, info_message, success_message,
@@ -44,7 +50,6 @@ const io = new Server(server, {
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
-    credentials: true,
   },
   transports: ["websocket", "polling"],
 });
