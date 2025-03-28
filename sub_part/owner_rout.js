@@ -1274,7 +1274,7 @@ router.post("/add-package-request", (req, res) => {
     isNaN(parseFloat(price)) ||
     !event_name ||
     !location ||
-    !requirements ||
+    // !requirements ||
     isNaN(parseInt(days_required, 10)) ||
     isNaN(parseFloat(total_amount)) ||
     !sender_email ||
@@ -1416,7 +1416,7 @@ router.post("/add-equipment-request", (req, res) => {
     !equipment_description ||
     isNaN(equipment_price_per_day) ||
     !location ||
-    !requirements ||
+    // !requirements ||
     isNaN(days_required) ||
     isNaN(total_amount) ||
     !sender_email ||
