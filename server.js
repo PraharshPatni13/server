@@ -39,13 +39,13 @@ const { generate_otp, get_otp, clear_otp } = require('./modules/OTP_generate');
 
 
 
-const https = require('https');
+const http = require('http');
 const { Server } = require('socket.io');
-const options = {
-  key: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/privkey.pem'),
-  cert: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/fullchain.pem')
-};
-const server = https.createServer(options, app);
+// const options = {
+//   key: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/privkey.pem'),
+//   cert: fs.readFileSync('/etc/letsencrypt/live/srv749838.hstgr.cloud/fullchain.pem')
+// };
+const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: "*",

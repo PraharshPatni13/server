@@ -20,6 +20,7 @@ const {
   get_otp,
   clear_otp,
 } = require("./../modules/OTP_generate");
+const { route } = require("./other_rout_shrey_11");
 const JWT_SECRET_KEY = "Jwt_key_for_photography_website";
 require('dotenv').config();
 function create_jwt_token(user_email, user_name) {
@@ -498,6 +499,21 @@ router.post("/update-owner", (req, res) => {
   );
 });
 
+router.delete("/delete-owner", (req, res) => {
+  const { user_email } = req.body;
+  const query = "DELETE FROM owner WHERE user_email = ?";
+  db.query(query, [user_email], (err, result) => {
+    if (err) {
+      console.error("Error deleting owner:", err);
+      return res
+        .status(500)
+        .json({ error: "An error occurred while deleting the owner." });
+    }
+    res.status(200).json({ message: "Account deleted successfully." });
+  });
+});
+
+
 router.post("/update-business", (req, res) => {
   const {
     business_name,
@@ -524,7 +540,7 @@ router.post("/update-business", (req, res) => {
 
   db.query(
     query,
-    [business_name, business_email, gst_number , business_address, user_email],
+    [business_name, business_email, gst_number, business_address, user_email],
     (err, result) => {
       if (err) {
         console.error("Error updating business data:", err);
