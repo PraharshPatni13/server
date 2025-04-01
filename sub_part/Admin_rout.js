@@ -94,7 +94,7 @@ router.get('/owners', async (req, res) => {
     const query = `SELECT * FROM ${process.env.DB_NAME}.owner;`;
     db.query(query, (err, results) => {
         if (err) {
-            console.error('Error executing query at admin owners:', err.message);
+            console.error('Error executing query at admins owners:', err.message);
             return res.status(500).json({ error: 'Database error' });
         }
         res.json(results);
@@ -112,7 +112,19 @@ router.get('/get_all_admin', (req, res) => {
         }
     });
 });
-
+router.get("/count-full-admins", async (req, res) => {
+    try {
+        const query = "SELECT COUNT(*) AS count FROM admins WHERE access_type = 'Full'";
+        db.query(query, (err, result) => {
+            if (err) {
+                return res.status(500).json({ error: "Database error", details: err });
+            }
+            res.json({ fullAdmins: result[0].count });
+        });
+    } catch (error) {
+        res.status(500).json({ error: "Internal server error", details: error });
+    }
+});
 
 router.put('/update_data', (req, res) => {
     const { admin_id, admin_name, admin_email, admin_password, access_type } = req.body;
