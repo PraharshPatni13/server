@@ -281,6 +281,7 @@ app.post('/add_profile_by_email', (req, res) => {
 app.post('/confirm-equipment-event', (req, res) => {
   const { event_id, user_email, sender_email } = req.body;
 
+  console.log('Received event_id:', event_id);
   db.query(
     'UPDATE event_request SET event_status = "Accepted" WHERE id = ? AND receiver_email = ?',
     [event_id, user_email],
