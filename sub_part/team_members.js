@@ -14,7 +14,6 @@ const db = mysql.createConnection({
 
 
 router.post("/get_all_members_status", (req, res) => {
-  const today = moment().format("YYYY-MM-DD HH:mm:ss"); // Current timestamp
   const { user_email } = req.body; // Extract user email
 
   if (!user_email) {
@@ -22,12 +21,13 @@ router.post("/get_all_members_status", (req, res) => {
   }
 
   const query = `
-      SELECT assigned_team_member, event_request_type, package_name, equipment_name
-      FROM event_request 
-      WHERE ? BETWEEN start_date AND end_date
+SELECT assigned_team_member, event_request_type, package_name, equipment_name
+FROM event_request
+WHERE NOW() BETWEEN start_date AND end_date
+  AND receiver_email = ?;
   `;
 
-  db.query(query, [today], (err, results) => {
+  db.query(query,[user_email], (err, results) => {
       if (err) {
           return res.status(500).json({ error: "Database error", details: err });
       }
