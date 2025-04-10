@@ -655,6 +655,63 @@ router.post("/remove-equipment", (req, res) => {
   });
 });
 
+router.post("/edit-equipment", (req, res) => {
+  const {
+    user_email,
+    user_equipment_id,
+    name,
+    equipment_company,
+    equipment_type,
+    equipment_description,
+    equipment_price_per_day,
+  } = req.body;
+
+  // Validate required fields
+  if (
+    !user_email ||
+    !user_equipment_id ||
+    !name ||
+    !equipment_company ||
+    !equipment_type ||
+    !equipment_price_per_day
+  ) {
+    return res.status(400).json({ message: "Missing required fields" });
+  }
+
+  const query = `
+    UPDATE equipment 
+    SET name = ?, equipment_company = ?, equipment_type = ?, 
+        equipment_description = ?, equipment_price_per_day = ?
+    WHERE user_email = ? AND user_equipment_id = ?`;
+
+  db.query(
+    query,
+    [
+      name,
+      equipment_company,
+      equipment_type,
+      equipment_description,
+      equipment_price_per_day,
+      user_email,
+      user_equipment_id,
+    ],
+    (err, result) => {
+      if (err) {
+        console.error("Error updating equipment:", err);
+        return res.status(500).json({ message: "Error updating equipment" });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ message: "Equipment not found or you don't have permission to edit it" });
+      }
+
+      res.status(200).json({
+        message: "Equipment updated successfully"
+      });
+    }
+  );
+});
+
 router.post("/add-one-equipment", (req, res) => {
   const {
     user_email,
@@ -1742,6 +1799,63 @@ router.post("/add-service", (req, res) => {
       });
     }
   );
+});
+
+// Update an existing service
+router.put("/update-service/:id", (req, res) => {
+  const serviceId = req.params.id;
+  const { service_name, price_per_day, description, user_email } = req.body;
+
+  // Validate required fields
+  if (!service_name || !price_per_day || !user_email || !serviceId) {
+    return res.status(400).json({
+      error: "Service name, price per day, user email, and service ID are required"
+    });
+  }
+
+  // First verify the user owns this service
+  const verifyQuery = `
+    SELECT id FROM owner_services 
+    WHERE id = ? AND user_email = ?
+  `;
+
+  db.query(verifyQuery, [serviceId, user_email], (err, results) => {
+    if (err) {
+      console.error("Error verifying service ownership:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (results.length === 0) {
+      return res.status(403).json({
+        error: "Unauthorized or service not found"
+      });
+    }
+
+    // Update the service
+    const updateQuery = `
+      UPDATE owner_services 
+      SET service_name = ?, price_per_day = ?, description = ?
+      WHERE id = ?
+    `;
+
+    db.query(updateQuery, [service_name, price_per_day, description || null, serviceId], (updateErr, updateResult) => {
+      if (updateErr) {
+        console.error("Error updating service:", updateErr);
+        return res.status(500).json({ error: "Error updating service" });
+      }
+
+      res.status(200).json({
+        message: "Service updated successfully",
+        service: {
+          id: serviceId,
+          service_name,
+          price_per_day,
+          description,
+          user_email
+        }
+      });
+    });
+  });
 });
 
 // Get services by user email
