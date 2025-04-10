@@ -14,37 +14,43 @@ const db = mysql.createConnection({
 
 
 router.post("/get_all_members_status", (req, res) => {
+  console.log("Request received for get_all_members_status");
   const today = moment().format("YYYY-MM-DD HH:mm:ss"); // Current timestamp
   const { user_email } = req.body; // Extract user email
 
   if (!user_email) {
-      return res.status(400).json({ error: "user_email is required" });
+    return res.status(400).json({ error: "user_email is required" });
   }
 
+  console.log("before query Request received for get_all_members_status");
   const query = `
-      SELECT assigned_team_member, event_request_type, package_name, equipment_name
-      FROM event_request 
-      WHERE ? BETWEEN start_date AND end_date
-  `;
+  SELECT assigned_team_member, event_request_type, package_name, equipment_name
+  FROM event_request 
+  WHERE ? BETWEEN start_date AND end_date AND receiver_email = ?
+`;
 
-  db.query(query, [today], (err, results) => {
-      if (err) {
-          return res.status(500).json({ error: "Database error", details: err });
-      }
+  db.query(query, [today, user_email], (err, results) => {
+    console.log("running query");
+    if (err) {
+      return res.status(200).json({ error: "Database error", details: err });
+    }
 
-      if (results.length === 0) {
-          return res.json({ assigned_team_member: [], event_details: [] }); // No data found
-      }
+    if (results.length === 0) {
+      console.log("No data found for the user.");
+      return res.json({ assigned_team_member: [], event_details: [] }); // No data found
+    }
+    console.log("this is for team member assignment ", results);
 
-      const responseData = results.map(row => ({
-          assigned_team_member: row.assigned_team_member 
-              ? String(row.assigned_team_member).split(",").map(item => item.trim()) 
-              : [],
-          event_request_type: row.event_request_type,  // Include event_request_type
-          event_detail: row.event_request_type === "package" ? row.package_name : row.equipment_name
-      }));
+    const responseData = results.map(row => ({
+      assigned_team_member: row.assigned_team_member
+        ? String(row.assigned_team_member).split(",").map(item => item.trim())
+        : [],
+      event_request_type: row.event_request_type,  // Include event_request_type
+      event_detail: row.event_request_type === "package" ? row.package_name : row.equipment_name
+    }));
+    console.log("response from the server side ", responseData);
 
-      res.json(responseData);
+    res.json(responseData);
   });
 });
 
