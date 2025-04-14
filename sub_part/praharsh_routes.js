@@ -43,8 +43,11 @@ router.post("/get_all_notifications", (req, res) => {
   if (!email) {
     return res.status(400).json({ error: "user_email is required" })
   }
-  const query = "SELECT * FROM notifications_pes WHERE user_email=? ORDER BY id DESC"
+  console.log("after verifying the email")
+  const query = "SELECT * FROM notifications_pes WHERE user_email=? and is_seen= 1 ORDER BY id DESC"
   db.query(query, [email], (err, result) => {
+
+    console.log("notifications data", result)
     if (err) {
       console.error("Error executing query:", err);
       return res.status(500).json({ error: "Database error" });
@@ -57,7 +60,6 @@ router.post("/get_all_notifications", (req, res) => {
     }
   })
 })
-
 router.post("/fetch_services_for_preview", (req, res) => {
   const { user_email } = req.body;
   if (!user_email) {

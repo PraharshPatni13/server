@@ -2093,10 +2093,11 @@ router.get("/get-profile-image/:user_email", (req, res) => {
   });
 });
 
-router.get("/update-Notification-is-seen/:notification_id", (req, res) => {
-  const { notification_id } = req.params;
-  const query = `UPDATE notifications_pes SET is_seen = 1 WHERE id = ?`;
-  db.query(query, [notification_id], (err, results) => {
+router.get("/update-Notification-is-seen/:notification_type", (req, res) => {
+  const { notification_type } = req.params;
+  console.log("Notification Type", notification_type)
+  const query = `UPDATE notifications_pes SET is_seen = 0 WHERE notification_type=?`;
+  db.query(query, [notification_type], (err, results) => {
     if (err) {
       console.error("Error updating notification:", err);
       return res.status(500).json({ error: "Error updating notification" });
