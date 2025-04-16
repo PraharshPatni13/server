@@ -1,5 +1,7 @@
 const express = require("express");
 const mysql = require("mysql2");
+const fs = require('fs');
+const path = require('path');
 // const { io } = require("../server");
 
 
@@ -194,6 +196,42 @@ router.post("/verify_otp_owner", async (req, res) => {
             return res.status(500).json({ error: "Database error" });
           }
           let token = create_jwt_token(user_email, user_name);
+
+          // create the root folder and add the images in this folder 
+          try {
+            const baseDir = path.join(__dirname, "..", "root");
+
+            // Step 1: Create 'root' folder if not exists
+            if (!fs.existsSync(baseDir)) {
+              fs.mkdirSync(baseDir);
+              console.log("Created root folder");
+            }
+
+            // Step 2: Create user folder
+            const userDir = path.join(baseDir, user_email);
+            if (!fs.existsSync(userDir)) {
+              fs.mkdirSync(userDir);
+              console.log("Created user folder:", user_email);
+            }
+
+            // Step 3: Create subfolders
+            const userProfileDir = path.join(userDir, "user_profile");
+            const businessProfileDir = path.join(userDir, "business_profile");
+            const portfolioFoldersDir = path.join(userDir, "portfolio", "folders");
+
+            fs.mkdirSync(userProfileDir, { recursive: true });
+            fs.mkdirSync(businessProfileDir, { recursive: true });
+            fs.mkdirSync(portfolioFoldersDir, { recursive: true });
+
+            console.log("Created all user subfolders");
+          } catch (folderErr) {
+            console.error("Failed to create folders:", folderErr);
+            return res.status(500).json({ error: "Failed to create user folders" });
+          }
+
+          // end of the create folder structure code 
+
+
           getNotifications(
             "padding_owner",
             `new request on ${user_email}`,
@@ -428,7 +466,6 @@ router.post("/update-status", async (req, res) => {
         return res.status(400).json({ message: "Admin not found" });
       }
 
-      const admin_id = adminResult[0].admin_id;
 
       // Update the user's status in the 'users' table
       const updateStatusQuery = `
@@ -439,7 +476,7 @@ router.post("/update-status", async (req, res) => {
 
       db.execute(
         updateStatusQuery,
-        [user_Status, safeMessage, admin_id, user_email],
+        [user_Status, safeMessage, safeAdminEmail, user_email],
         (err, result) => {
           if (user_Status == "Accept") {
             req.io.emit(`user_status_updated_${user_email}`, { user_email, user_Status });
@@ -2092,6 +2129,40 @@ router.get("/get-profile-image/:user_email", (req, res) => {
     });
   });
 });
+
+// router.get("/fetch_profile_in_equipment/:sender_email",(req,res)=>{
+//   const {sender_email} = req.params;
+
+//   const query = ""
+// })
+router.get("/fetch_profile_in_equipment/:sender_email", (req, res) => {
+  const { sender_email } = req.params;
+
+  const query = `
+    SELECT 
+      user_profile_image_base64,
+      user_name,
+      business_name,
+      business_address,
+      user_email
+    FROM owner
+    WHERE user_email = ?
+  `;
+
+  db.query(query, [sender_email], (err, results) => {
+    if (err) {
+      console.error("Error fetching profile:", err);
+      return res.status(500).json({ error: "Internal Server Error" });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    return res.json(results[0]);
+  });
+});
+
 
 router.get("/update-Notification-is-seen/:notification_type", (req, res) => {
   const { notification_type } = req.params;
