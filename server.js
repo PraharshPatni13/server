@@ -58,12 +58,22 @@ app.use((req, res, next) => {
   req.io = io; // Attach io to request object
   next();
 });
-io.on("connection", (socket) => {
-  console.log("✅ A user connected:", socket.id);
-
-  socket.on("disconnect", () => {
-    console.log("❌ A user disconnected:", socket.id);
+io.on('connection', (socket) => {
+  socket.on('user_connected', (data) => {
+    console.log('A user connected:', data);
   });
+  socket.on('message', (msg) => {
+    console.log('Message received:', msg);
+    io.emit('message', msg);
+  });
+
+  socket.on('user_disconnected', (data) => {
+    console.log('A user disconnected:', data);
+  });
+  socket.on('disconnect', () => {
+    console.log('A user disconnected');
+  });
+
 });
 // Move this to the top level, outside of connection handler
 const emitEventRequestNotification = (userEmail, data) => {
@@ -119,84 +129,6 @@ app.use((req, res, next) => {
 
 app.get("/", (req, res) => {
   res.send("hi server user running page will be here '/' ")
-});
-
-app.delete("/owner-folders/:folder_id", (req, res) => {
-  const { folder_id } = req.params;
-  const { user_email } = req.body;
-
-  // First verify the user owns this folder
-  const verifyQuery = `
-      SELECT folder_id FROM owner_folders 
-      WHERE folder_id = ? AND user_email = ?
-    `;
-
-  db.query(verifyQuery, [folder_id, user_email], (err, results) => {
-    if (err) {
-      console.error("Error verifying folder ownership:", err);
-      return res.status(500).json({ error: "Database error" });
-    }
-
-    if (results.length === 0) {
-      return res
-        .status(403)
-        .json({ error: "Unauthorized or folder not found" });
-    }
-
-    // Delete the folder (cascade will handle file deletion)
-    const deleteQuery = `DELETE FROM owner_folders WHERE folder_id = ?`;
-
-    db.query(deleteQuery, [folder_id], (err, result) => {
-      if (err) {
-        console.error("Error deleting folder:", err);
-        return res.status(500).json({ error: "Error deleting folder" });
-      }
-
-      res
-        .status(200)
-        .json({ message: "Folder and files deleted successfully" });
-    });
-  });
-});
-
-app.delete("/owner/owner-folders/:folder_id", (req, res) => {
-  const { folder_id } = req.params;
-  const { user_email } = req.body;
-
-  // First verify the user owns this folder
-  const verifyQuery = `
-      SELECT folder_id FROM owner_folders
-      WHERE folder_id = ? AND user_email = ?
-    `;
-
-  db.query(verifyQuery, [folder_id, user_email], (err, results) => {
-    if (err) {
-      console.error("Error verifying folder ownership:", err);
-      return res.status(500).json({ error: "Database error" });
-    }
-
-    if (results.length === 0) {
-      return res
-        .status(403)
-        .json({ error: "Unauthorized or folder not found" });
-    }
-
-    // Delete the folder (cascade will handle file deletion)
-    const deleteQuery = `DELETE FROM owner_folders WHERE folder_id = ?`;
-
-    db.query(deleteQuery, [folder_id], (err, result) => {
-      if (err) {
-        console.error("Error deleting folder:", err);
-        return res.status(500).json({ error: "Error deleting folder" });
-      }
-
-
-      io.emit(`folderDeleted_${user_email}`, folder_id);
-      res
-        .status(200)
-        .json({ message: "Folder and files deleted successfully" });
-    });
-  });
 });
 
 // for notifications 

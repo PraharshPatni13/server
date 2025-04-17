@@ -476,37 +476,6 @@ router.post("/owner_drive/get_portfolio", (req, res) => {
   });
 });
 
-router.post("/api/upload-photo", (req, res) => {
-  const { photoData, name, type, user_email } = req.body;
-
-  // Validate input
-  if (!photoData || !name || !type) {
-    return res
-      .status(400)
-      .json({ success: false, message: "Missing required fields" });
-  }
-
-  // SQL query to insert photo into the database
-  const query =
-    "INSERT INTO photo_files (photo_name, photo_type, photo,user_email) VALUES (?, ?, ?,?)";
-
-  // Insert the data into the database
-  db.execute(query, [name, type, photoData, user_email], (err, result) => {
-    if (err) {
-      console.error("Error inserting photo into the database:", err);
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to save the photo" });
-    }
-
-    // Return success response
-    res.json({
-      success: true,
-      message: "Photo added to database successfully!",
-      data: result,
-    });
-  });
-});
 
 router.post("/upload-invoice-logo", async (req, res) => {
   const { image, user_email } = req.body;

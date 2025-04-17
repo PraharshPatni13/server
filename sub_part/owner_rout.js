@@ -4,7 +4,12 @@ const fs = require('fs');
 const path = require('path');
 // const { io } = require("../server");
 
-
+// Define root directory for file storage
+const rootDirectory = path.join(__dirname, "..", "root");
+// Create root directory if it doesn't exist
+if (!fs.existsSync(rootDirectory)) {
+  fs.mkdirSync(rootDirectory, { recursive: true });
+}
 
 const router = express.Router();
 const jwt = require("jsonwebtoken");
@@ -197,37 +202,39 @@ router.post("/verify_otp_owner", async (req, res) => {
           }
           let token = create_jwt_token(user_email, user_name);
 
-          // create the root folder and add the images in this folder 
           try {
             const baseDir = path.join(__dirname, "..", "root");
-
+          
             // Step 1: Create 'root' folder if not exists
             if (!fs.existsSync(baseDir)) {
               fs.mkdirSync(baseDir);
               console.log("Created root folder");
             }
-
+          
             // Step 2: Create user folder
             const userDir = path.join(baseDir, user_email);
             if (!fs.existsSync(userDir)) {
               fs.mkdirSync(userDir);
               console.log("Created user folder:", user_email);
             }
-
-            // Step 3: Create subfolders
-            const userProfileDir = path.join(userDir, "user_profile");
-            const businessProfileDir = path.join(userDir, "business_profile");
-            const portfolioFoldersDir = path.join(userDir, "portfolio", "folders");
-
-            fs.mkdirSync(userProfileDir, { recursive: true });
-            fs.mkdirSync(businessProfileDir, { recursive: true });
+          
+            // Step 3: Create 'drive' folder inside user
+            const driveDir = path.join(userDir, "drive");
+            const portfolioFoldersDir = path.join(driveDir, "portfolio", "folders");
             fs.mkdirSync(portfolioFoldersDir, { recursive: true });
-
-            console.log("Created all user subfolders");
+          
+            console.log("Created 'drive/portfolio/folders' structure");
+          
+            // ✅ Note: No user_profile or business_profile folders now
+            // Those will be uploaded later as files:
+            //   path.join(userDir, "user_profile.jpg") or ".png"
+            //   path.join(userDir, "business_profile.jpg") or ".png"
+          
           } catch (folderErr) {
             console.error("Failed to create folders:", folderErr);
             return res.status(500).json({ error: "Failed to create user folders" });
           }
+          
 
           // end of the create folder structure code 
 
@@ -1025,60 +1032,205 @@ router.get("/portfolio/photos/:folder_id", (req, res) => {
 });
 
 router.post("/update-user-profile-image", (req, res) => {
-  const { user_email, userProfileImage } = req.body;
-
-  if (!user_email || !userProfileImage) {
-    return res.status(400).send("Missing required fields.");
+  const user_email = req.headers['x-user-email'];
+  
+  if (!user_email) {
+    return res.status(400).send("Missing user email header.");
   }
 
-  const query = `UPDATE owner SET user_profile_image_base64 = ? WHERE user_email = ?`;
-  const values = [userProfileImage, user_email];
+  try {
+    // Create user directory if it doesn't exist
+    const baseDir = path.join(__dirname, "..", "root");
+    const userDir = path.join(baseDir, user_email);
+    
+    if (!fs.existsSync(baseDir)) {
+      fs.mkdirSync(baseDir);
+    }
+    
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir);
+    }
+    
+    // Generate filename with timestamp to avoid conflicts
+    const fileExt = req.headers['content-type']?.split('/')[1] || 'jpeg';
+    const filename = `user_profile.${fileExt}`;
+    const filepath = path.join(userDir, filename);
+    const fileUrlPath = `/root/${user_email}/${filename}`;
+    
+    // Create write stream
+    const writeStream = fs.createWriteStream(filepath);
+    
+    // Pipe request body directly to file
+    req.pipe(writeStream);
+    
+    // Handle completion and errors
+    writeStream.on('finish', () => {
+      // Update database with file path instead of base64
+      const query = `UPDATE owner SET user_profile_image_base64 = ? WHERE user_email = ?`;
+      const values = [fileUrlPath, user_email];
+      
+      db.query(query, values, (err, result) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).send("Database error.");
+        }
+        
+        if (result.affectedRows === 0) {
+          return res.status(404).send("Owner not found.");
+        }
+        
+        res.json({ 
+          message: "User profile image updated successfully.",
+          imagePath: fileUrlPath
+        });
+      });
+    });
+    
+    writeStream.on('error', (err) => {
+      console.error('Error writing file:', err);
+      res.status(500).send("Error saving image.");
+    });
+    
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).send("Server error.");
+  }
+});
 
-  db.query(query, values, (err, result) => {
+// Add a new endpoint to serve the images
+router.get('/profile-image/:user_email', (req, res) => {
+  const { user_email } = req.params;
+  const query = `SELECT user_profile_image_base64 FROM owner WHERE user_email = ?`;
+  
+  db.query(query, [user_email], (err, results) => {
     if (err) {
-      console.error(err);
-      return res.status(500).send("Database error.");
+      console.error("Error fetching profile image path:", err);
+      return res.status(500).json({ error: "Database error" });
     }
-
-    if (result.affectedRows === 0) {
-      return res.status(404).send("Owner not found.");
+    
+    if (results.length === 0 || !results[0].user_profile_image_base64) {
+      return res.status(404).send("Image not found");
     }
-
-    res.json({ message: "User profile image updated successfully." });
+    
+    const imagePath = results[0].user_profile_image_base64;
+    
+    // If it's a URL path (new format)
+    if (imagePath.startsWith('/root/')) {
+      const fullPath = path.join(__dirname, '..', imagePath);
+      
+      if (!fs.existsSync(fullPath)) {
+        return res.status(404).send("Image file not found");
+      }
+      
+      res.sendFile(fullPath);
+    } 
+    // If it's base64 (old format)
+    else if (imagePath.startsWith('data:image')) {
+      const contentType = imagePath.split(';')[0].split(':')[1];
+      res.set('Content-Type', contentType);
+      const base64Data = imagePath.split(',')[1];
+      const buffer = Buffer.from(base64Data, 'base64');
+      res.send(buffer);
+    }
+    else {
+      res.status(404).send("Invalid image format");
+    }
   });
 });
 
+// Remove profile image (user or business)
 router.post("/remove-profile-image-type", (req, res) => {
   const { user_email, type } = req.body;
 
   if (!user_email || !type) {
-    return res
-      .status(400)
-      .send("Missing required fields. 'user_email' and 'type' are required.");
+    return res.status(400).json({ error: "User email and type are required" });
   }
 
-  let column;
-  if (type === "user") {
-    column = "user_profile_image_base64";
-  } else if (type === "business") {
-    column = "business_profile_base64";
+  console.log(`Removing ${type} profile image for user: ${user_email}`);
+
+  // First, get the current image path from the database
+  let query;
+  let updateQuery;
+  let successMessage;
+
+  if (type === 'user') {
+    query = "SELECT user_profile_image_base64 FROM owner WHERE user_email = ?";
+    updateQuery = "UPDATE owner SET user_profile_image_base64 = NULL WHERE user_email = ?";
+    successMessage = "user profile image removed successfully.";
+  } else if (type === 'business') {
+    query = "SELECT business_profile_base64 FROM owner WHERE user_email = ?";
+    updateQuery = "UPDATE owner SET business_profile_base64 = NULL WHERE user_email = ?";
+    successMessage = "business profile image removed successfully.";
   } else {
-    return res.status(400).send("Invalid type. Use 'user' or 'business'.");
+    return res.status(400).json({ error: "Invalid type. Must be 'user' or 'business'" });
   }
 
-  const query = `UPDATE owner SET ${column} = NULL WHERE user_email = ?`;
-
-  db.query(query, [user_email], (err, result) => {
+  // Get the current image path
+  db.query(query, [user_email], (err, results) => {
     if (err) {
-      console.error(err);
-      return res.status(500).send("Database error.");
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Database error" });
     }
 
-    if (result.affectedRows === 0) {
-      return res.status(404).send("Owner not found.");
+    if (results.length === 0) {
+      return res.status(404).json({ error: "User not found" });
     }
 
-    res.json({ message: `${type} profile image removed successfully.` });
+    // Get the image path
+    const imagePath = type === 'user' ? results[0].user_profile_image_base64 : results[0].business_profile_base64;
+
+    // Update database to remove the image path
+    db.query(updateQuery, [user_email], (updateErr, updateResult) => {
+      if (updateErr) {
+        console.error("Database update error:", updateErr);
+        return res.status(500).json({ error: "Failed to update database" });
+      }
+
+      if (updateResult.affectedRows === 0) {
+        return res.status(404).json({ error: "User not found or no image to delete" });
+      }
+
+      // If there was an image path and it's not a base64 string, try to delete the file
+      if (imagePath && !imagePath.startsWith('data:')) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          
+          // Try different possible paths for the physical file
+          const serverRootDir = path.join(__dirname, '..');
+          let filePath = path.join(serverRootDir, imagePath);
+          
+          console.log(`Checking for file at: ${filePath}`);
+          let fileExists = fs.existsSync(filePath);
+          
+          // If not found, try alternative path
+          if (!fileExists) {
+            // Handle relative path format (/root/user@email/...)
+            const altPath = path.join(path.dirname(serverRootDir), "root", imagePath.replace('/root/', ''));
+            console.log(`Checking alternative path: ${altPath}`);
+            
+            if (fs.existsSync(altPath)) {
+              filePath = altPath;
+              fileExists = true;
+            }
+          }
+          
+          // If file exists, delete it
+          if (fileExists) {
+            fs.unlinkSync(filePath);
+            console.log(`Deleted physical file: ${filePath}`);
+          } else {
+            console.warn(`File not found on disk: ${imagePath}`);
+          }
+        } catch (fileErr) {
+          console.error(`Error deleting physical file:`, fileErr);
+          // Continue even if file deletion fails
+        }
+      }
+
+      // Return success response
+      res.json({ message: successMessage });
+    });
   });
 });
 
@@ -1123,27 +1275,157 @@ router.get("/fetch-profile-image", (req, res) => {
 });
 
 router.post("/update-business-profile-image", (req, res) => {
-  const { user_email, businessProfileImage } = req.body;
-
-  if (!user_email || !businessProfileImage) {
-    return res.status(400).send("Missing required fields.");
+  const user_email = req.headers['x-user-email'];
+  
+  if (!user_email) {
+    return res.status(400).send("Missing user email header.");
   }
 
-  const query = `UPDATE owner SET business_profile_base64 = ? WHERE user_email = ?`;
-  const values = [businessProfileImage, user_email];
-
-  db.query(query, values, (err, result) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).send("Database error.");
+  try {
+    // Create user directory if it doesn't exist
+    const baseDir = path.join(__dirname, "..", "root");
+    const userDir = path.join(baseDir, user_email);
+    
+    if (!fs.existsSync(baseDir)) {
+      fs.mkdirSync(baseDir);
     }
-
-    if (result.affectedRows === 0) {
-      return res.status(404).send("Owner not found.");
+    
+    if (!fs.existsSync(userDir)) {
+      fs.mkdirSync(userDir);
     }
+    
+    // Generate filename with timestamp to avoid conflicts
+    const fileExt = req.headers['content-type']?.split('/')[1] || 'jpeg';
+    const filename = `business_profile.${fileExt}`;
+    const filepath = path.join(userDir, filename);
+    const fileUrlPath = `/root/${user_email}/${filename}`;
+    
+    // Create write stream
+    const writeStream = fs.createWriteStream(filepath);
+    
+    // Pipe request body directly to file
+    req.pipe(writeStream);
+    
+    // Handle completion and errors
+    writeStream.on('finish', () => {
+      // Update database with file path instead of base64
+      const query = `UPDATE owner SET business_profile_base64 = ? WHERE user_email = ?`;
+      const values = [fileUrlPath, user_email];
+      
+      db.query(query, values, (err, result) => {
+        if (err) {
+          console.error('Database error:', err);
+          return res.status(500).send("Database error.");
+        }
+        
+        if (result.affectedRows === 0) {
+          return res.status(404).send("Owner not found.");
+        }
+        
+        res.json({ 
+          message: "Business profile image updated successfully.",
+          imagePath: fileUrlPath
+        });
+      });
+    });
+    
+    writeStream.on('error', (err) => {
+      console.error('Error writing file:', err);
+      res.status(500).send("Error saving image.");
+    });
+    
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).send("Server error.");
+  }
+});
 
-    res.json({ message: "Business profile image updated successfully." });
-  });
+// Serve business profile image by email
+router.get("/business-profile-image/:user_email", (req, res) => {
+  const user_email = req.params.user_email;
+  
+  if (!user_email) {
+    return res.status(400).send("Missing user email");
+  }
+  
+  // Get the profile image path from the database
+  db.query(
+    "SELECT business_profile_base64 FROM owner WHERE user_email = ?",
+    [user_email],
+    (err, results) => {
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).send("Database error");
+      }
+      
+      if (results.length === 0) {
+        return res.status(404).send("User not found");
+      }
+      
+      const imagePath = results[0].business_profile_base64;
+      
+      if (!imagePath) {
+        return res.status(404).send("No business profile image found");
+      }
+      
+      // Determine the content type based on the image format
+      let contentType = "image/jpeg"; // Default
+      
+      if (imagePath.endsWith(".png")) {
+        contentType = "image/png";
+      } else if (imagePath.endsWith(".gif")) {
+        contentType = "image/gif";
+      }
+      
+      // If it's a file path (new format)
+      if (imagePath.startsWith('/root/')) {
+        // Use the same path resolution logic as other endpoints
+        const serverRootDir = path.join(__dirname, '..');
+        const relativePath = imagePath;
+        const fullPath = path.join(serverRootDir, relativePath);
+        
+        if (fs.existsSync(fullPath)) {
+          res.setHeader('Content-Type', contentType);
+          return res.sendFile(fullPath);
+        }
+        
+        // Try alternative path as fallback
+        const altPath = path.resolve(serverRootDir, `.${relativePath}`);
+        
+        if (fs.existsSync(altPath)) {
+          res.setHeader('Content-Type', contentType);
+          return res.sendFile(altPath);
+        }
+        
+        console.error(`Business profile image not found at path: ${fullPath} or ${altPath}`);
+        return res.status(404).send(`Image file not found on server`);
+      } 
+      // If it's base64 (old format)
+      else if (imagePath.startsWith('data:')) {
+        try {
+          // Extract content type and base64 data
+          const matches = imagePath.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+          
+          if (!matches || matches.length !== 3) {
+            console.error(`Invalid image data format: ${imagePath.substring(0, 30)}...`);
+            return res.status(400).send("Invalid image data format");
+          }
+          
+          const base64Data = matches[2];
+          const buffer = Buffer.from(base64Data, 'base64');
+          
+          res.setHeader('Content-Type', matches[1]);
+          return res.send(buffer);
+        } catch (error) {
+          console.error("Error processing base64 image:", error);
+          return res.status(500).send("Error processing image");
+        }
+      } else {
+        console.error(`Invalid business profile image path format: ${imagePath.substring(0, 30)}...`);
+        return res.status(400).send("Invalid image format");
+      }
+    }
+  );
 });
 
 // Create a new folder
@@ -1156,6 +1438,38 @@ router.post("/owner-folders/create", (req, res) => {
       .json({ error: "Folder name and user email are required" });
   }
 
+  // Create directory structure for the user if it doesn't exist
+  const userFolderPath = path.join(rootDirectory, user_email, 'drive', 'portfolio', 'folders', folder_name);
+  
+  // Create the full directory path if it doesn't exist
+  fs.mkdirSync(userFolderPath, { recursive: true });
+  
+  let thumbnailPath = null;
+  
+  // Process and save the cover image if provided
+  if (cover_page_base64 && cover_page_base64.startsWith('data:image')) {
+    try {
+      // Extract the base64 data and file type
+      const contentType = cover_page_base64.split(';')[0].split(':')[1];
+      const extension = contentType.split('/')[1];
+      const base64Data = cover_page_base64.split(',')[1];
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      // Create filename for the thumbnail
+      const thumbnailFilename = 'thumbnail.' + extension;
+      const fullThumbnailPath = path.join(userFolderPath, thumbnailFilename);
+      
+      // Write the file
+      fs.writeFileSync(fullThumbnailPath, buffer);
+      
+      // Store the relative path to be saved in the database
+      thumbnailPath = `${user_email}/drive/portfolio/folders/${folder_name}/${thumbnailFilename}`;
+    } catch (error) {
+      console.error("Error saving folder thumbnail:", error);
+      return res.status(500).json({ error: "Error saving folder thumbnail" });
+    }
+  }
+
   const query = `
     INSERT INTO owner_folders (folder_name, user_email, cover_page_base64)
     VALUES (?, ?, ?)
@@ -1163,7 +1477,7 @@ router.post("/owner-folders/create", (req, res) => {
 
   db.query(
     query,
-    [folder_name, user_email, cover_page_base64],
+    [folder_name, user_email, thumbnailPath],
     (err, result) => {
       if (err) {
         console.error("Error creating folder:", err);
@@ -1173,6 +1487,7 @@ router.post("/owner-folders/create", (req, res) => {
       res.status(201).json({
         message: "Folder created successfully.",
         folder_id: result.insertId,
+        cover_path: thumbnailPath
       });
     }
   );
@@ -1241,6 +1556,8 @@ router.post("/owner-folders/upload", (req, res) => {
 router.get("/owner-folders/files/:folder_id", (req, res) => {
   const { folder_id } = req.params;
 
+  console.log(`Fetching files for folder_id: ${folder_id}`);
+
   const query = `
     SELECT file_id, file_name, file_type, created_at, file_data
     FROM owner_folders_files
@@ -1254,6 +1571,7 @@ router.get("/owner-folders/files/:folder_id", (req, res) => {
       return res.status(500).json({ error: "Error fetching files" });
     }
 
+    console.log(`Returning ${results.length} files for folder ${folder_id}`);
     res.status(200).json(results);
   });
 });
@@ -1263,39 +1581,125 @@ router.delete("/owner-folders/:folder_id", (req, res) => {
   const { folder_id } = req.params;
   const { user_email } = req.body;
 
-  // First verify the user owns this folder
-  const verifyQuery = `
-    SELECT folder_id FROM owner_folders 
+  console.log(`Attempting to delete folder ID: ${folder_id} for user: ${user_email}`);
+
+  // First get the folder information
+  const queryFind = `
+    SELECT folder_name, cover_page_base64 FROM owner_folders 
     WHERE folder_id = ? AND user_email = ?
   `;
 
-  db.query(verifyQuery, [folder_id, user_email], (err, results) => {
+  db.query(queryFind, [folder_id, user_email], (err, results) => {
     if (err) {
-      console.error("Error verifying folder ownership:", err);
-      return res.status(500).json({ error: "Database error" });
+      console.log("Database query failed:", err);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Database error while finding folder" 
+      });
     }
 
     if (results.length === 0) {
-      return res
-        .status(403)
-        .json({ error: "Unauthorized or folder not found" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Folder not found or unauthorized" 
+      });
     }
 
-    // Delete the folder (cascade will handle file deletion)
-    const deleteQuery = `DELETE FROM owner_folders WHERE folder_id = ?`;
-
-    db.query(deleteQuery, [folder_id], (err, result) => {
-      if (err) {
-        console.error("Error deleting folder:", err);
-        return res.status(500).json({ error: "Error deleting folder" });
+    const folderName = results[0].folder_name;
+    const coverPath = results[0].cover_page_base64;
+    
+    console.log(`Found folder to delete: "${folderName}"`);
+    
+    // Check if we have a physical folder to delete
+    let physicalFolderDeleted = false;
+    
+    try {
+      // Build physical folder path similar to how photo deletion works
+      const folderPath = path.join(__dirname, '..', 'root', user_email, 'drive', 'portfolio', 'folders', folderName);
+      console.log(`Physical folder path: ${folderPath}`);
+      
+      if (fs.existsSync(folderPath)) {
+        console.log(`Folder exists at ${folderPath}, attempting deletion`);
+        
+        // Use rimraf (like fs.rm) to recursively delete the folder and contents
+        const { execSync } = require('child_process');
+        
+        try {
+          if (process.platform === 'win32') {
+            console.log('Using Windows rmdir command');
+            execSync(`rmdir /s /q "${folderPath}"`);
+          } else {
+            console.log('Using Unix rm command');
+            execSync(`rm -rf "${folderPath}"`);
+          }
+          
+          physicalFolderDeleted = !fs.existsSync(folderPath);
+          console.log(`Folder deletion ${physicalFolderDeleted ? 'successful' : 'failed'}`);
+        } catch (deleteErr) {
+          console.log(`Command-line deletion error: ${deleteErr.message}`);
+          
+          // Try manual deletion as fallback
+          try {
+            deleteFolderContents(folderPath);
+            physicalFolderDeleted = !fs.existsSync(folderPath);
+          } catch (manualErr) {
+            console.log(`Manual deletion error: ${manualErr.message}`);
+          }
+        }
+      } else {
+        console.log(`Physical folder not found at ${folderPath}`);
       }
-
-      res
-        .status(200)
-        .json({ message: "Folder and files deleted successfully" });
-    });
+    } catch (fileErr) {
+      console.log(`Error handling physical folder: ${fileErr.message}`);
+    }
+    
+    // Always proceed with database deletion
+    deleteFolderFromDB(folder_id, user_email, physicalFolderDeleted, res);
   });
 });
+
+// Helper function to delete folder contents recursively
+function deleteFolderContents(folderPath) {
+  if (fs.existsSync(folderPath)) {
+    fs.readdirSync(folderPath).forEach(file => {
+      const curPath = path.join(folderPath, file);
+      if (fs.lstatSync(curPath).isDirectory()) {
+        // Recursively delete contents of subdirectory
+        deleteFolderContents(curPath);
+        // Then delete the now-empty subdirectory
+        fs.rmdirSync(curPath);
+      } else {
+        // Delete file
+        fs.unlinkSync(curPath);
+      }
+    });
+    // Delete the main folder itself
+    fs.rmdirSync(folderPath);
+  }
+}
+
+// Helper function to delete folder from database
+function deleteFolderFromDB(folder_id, user_email, physicalFolderDeleted, res) {
+  const query = "DELETE FROM owner_folders WHERE folder_id = ? AND user_email = ?";
+  
+  db.query(query, [folder_id, user_email], (err, result) => {
+    if (err) {
+      console.log("Database deletion error:", err);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Failed to delete folder from database" 
+      });
+    }
+    
+    console.log(`Successfully deleted folder ID ${folder_id} from database`);
+    res.json({
+      success: true,
+      message: "Folder deleted successfully",
+      databaseRowsDeleted: result.affectedRows,
+      fileSystemDeleted: physicalFolderDeleted
+    });
+  });
+}
 
 // Delete specific files
 router.post("/owner-folders-files/delete", (req, res) => {
@@ -1309,6 +1713,8 @@ router.post("/owner-folders-files/delete", (req, res) => {
   ) {
     return res.status(400).json({ error: "Invalid request data" });
   }
+
+  console.log(`Delete request - Folder: ${folder_id}, Files: ${file_ids.join(',')}, User: ${user_email}`);
 
   // Verify the user owns this folder
   const verifyQuery = `
@@ -1328,29 +1734,117 @@ router.post("/owner-folders-files/delete", (req, res) => {
         .json({ error: "Unauthorized or folder not found" });
     }
 
-    // Delete the specified files
-    const deleteQuery = `
-      DELETE FROM owner_folders_files 
+    // First, get the file paths from the database
+    const getFilesQuery = `
+      SELECT file_id, file_data, file_name 
+      FROM owner_folders_files 
       WHERE file_id IN (?) AND folder_id = ?
     `;
 
-    db.query(deleteQuery, [file_ids, folder_id], (err, result) => {
+    db.query(getFilesQuery, [file_ids, folder_id], (err, files) => {
       if (err) {
-        console.error("Error deleting files:", err);
-        return res.status(500).json({ error: "Error deleting files" });
+        console.error("Error fetching file data:", err);
+        return res.status(500).json({ error: "Error fetching file data" });
       }
 
-      if (result.affectedRows > 0) {
-        res.status(200).json({
-          message: "Files deleted successfully",
-          deletedCount: result.affectedRows,
-        });
-      } else {
-        res.status(404).json({
+      if (files.length === 0) {
+        return res.status(404).json({
           message: "No files found to delete",
           deletedCount: 0,
         });
       }
+
+      console.log(`Found ${files.length} files to delete`);
+
+      // Delete physical files first
+      const deleteResults = [];
+      const fs = require('fs');
+      const path = require('path');
+      const serverRootDir = path.join(__dirname, '..');
+
+      files.forEach(file => {
+        try {
+          // Skip base64 files
+          if (file.file_data && !file.file_data.startsWith('data:')) {
+            // Try the primary path first
+            let filePath = path.join(serverRootDir, file.file_data);
+            console.log(`Checking file at: ${filePath}`);
+            
+            let fileExists = fs.existsSync(filePath);
+            
+            // If not found, try alternative path
+            if (!fileExists) {
+              const altPath = path.join(path.dirname(serverRootDir), "root", file.file_data.replace('/root/', ''));
+              console.log(`Checking alternative path: ${altPath}`);
+              
+              if (fs.existsSync(altPath)) {
+                filePath = altPath;
+                fileExists = true;
+              }
+            }
+            
+            if (fileExists) {
+              fs.unlinkSync(filePath);
+              console.log(`Deleted physical file: ${filePath}`);
+              deleteResults.push({
+                file_id: file.file_id,
+                name: file.file_name,
+                status: 'File and database record deleted'
+              });
+            } else {
+              console.log(`File not found on disk: ${file.file_data}`);
+              deleteResults.push({
+                file_id: file.file_id,
+                name: file.file_name,
+                status: 'Database record deleted, file not found on disk'
+              });
+            }
+          } else {
+            // Base64 file, just delete the database record
+            deleteResults.push({
+              file_id: file.file_id,
+              name: file.file_name,
+              status: 'Database record deleted (base64 file)'
+            });
+          }
+        } catch (fileErr) {
+          console.error(`Error deleting physical file ${file.file_id}:`, fileErr);
+          deleteResults.push({
+            file_id: file.file_id,
+            name: file.file_name,
+            status: 'Error deleting physical file, database record will be deleted'
+          });
+        }
+      });
+
+      // After physical file deletion, delete database records
+      const deleteQuery = `
+        DELETE FROM owner_folders_files 
+        WHERE file_id IN (?) AND folder_id = ?
+      `;
+
+      db.query(deleteQuery, [file_ids, folder_id], (err, result) => {
+        if (err) {
+          console.error("Error deleting files from database:", err);
+          return res.status(500).json({ error: "Error deleting files from database" });
+        }
+
+        console.log(`Deleted ${result.affectedRows} records from database`);
+        
+        if (result.affectedRows > 0) {
+          res.status(200).json({
+            message: "Files deleted successfully",
+            deletedCount: result.affectedRows,
+            details: deleteResults
+          });
+        } else {
+          res.status(404).json({
+            message: "No files deleted from database",
+            deletedCount: 0,
+            details: deleteResults
+          });
+        }
+      });
     });
   });
 });
@@ -2182,5 +2676,885 @@ router.get("/update-Notification-is-seen/:notification_type", (req, res) => {
 });
 
 
+
+// 
+
+
+router.post("/api/upload-photo", (req, res) => {
+  const user_email = req.headers['x-user-email'];
+  const fileName = req.headers['x-file-name'];
+  const fileType = req.headers['content-type'] || 'image/jpeg';
+  
+  if (!user_email || !fileName) {
+    return res.status(400).json({ 
+      success: false, 
+      message: "Missing required headers (x-user-email, x-file-name)" 
+    });
+  }
+
+  try {
+    // Ensure directories exist with consistent path construction
+    const serverRootDir = path.join(__dirname, '..');
+    const baseDir = path.join(serverRootDir, 'root');
+    const userDir = path.join(baseDir, user_email);
+    const driveDir = path.join(userDir, 'drive');
+    const portfolioDir = path.join(driveDir, 'portfolio');
+    
+    
+    // Create directory structure if it doesn't exist
+    if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir);
+    if (!fs.existsSync(userDir)) fs.mkdirSync(userDir);
+    if (!fs.existsSync(driveDir)) fs.mkdirSync(driveDir);
+    if (!fs.existsSync(portfolioDir)) fs.mkdirSync(portfolioDir);
+    
+    // Generate unique filename to avoid conflicts
+    const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const safeFileName = uniquePrefix + '-' + fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filePath = path.join(portfolioDir, safeFileName);
+    
+    // Construct the relative path as stored in the database
+    const fileUrlPath = `/root/${user_email}/drive/portfolio/${safeFileName}`;
+    
+    // Create a write stream and pipe the request to it
+    const writeStream = fs.createWriteStream(filePath);
+    req.pipe(writeStream);
+    
+    writeStream.on('finish', () => {
+      // Insert record in database with file path, not the actual image data
+      const query = "INSERT INTO photo_files (photo_name, photo_type, photo, user_email) VALUES (?, ?, ?, ?)";
+      
+      db.execute(query, [fileName, fileType, fileUrlPath, user_email], (err, result) => {
+        if (err) {
+          console.error("Error inserting photo into the database:", err);
+          return res.status(500).json({ 
+            success: false, 
+            message: "Failed to save the photo" 
+          });
+        }
+
+        
+        // Return success with the ID and path
+        res.json({
+          success: true,
+          message: "Photo uploaded successfully!",
+          photo_id: result.insertId,
+          photo_path: fileUrlPath
+        });
+      });
+    });
+    
+    writeStream.on('error', (err) => {
+      console.error(`Error writing file to ${filePath}:`, err);
+      res.status(500).json({ 
+        success: false, 
+        message: "Error writing file" 
+      });
+    });
+    
+  } catch (error) {
+    console.error("Server error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error" 
+    });
+  }
+});
+
+// Make sure the API endpoints exist at both paths for backward compatibility
+router.post("/api/upload-photo", (req, res) => {
+  const url = `/owner/api/upload-photo`;
+  // Forward the request to the other handler
+  req.url = url;
+  router.handle(req, res);
+});
+
+// Ensure portfolio image serving endpoint uses owner/ prefix
+router.get("/portfolio-image/:photo_id", (req, res) => {
+  const { photo_id } = req.params;
+  
+  if (!photo_id) {
+    return res.status(400).json({ error: "Photo ID is required" });
+  }
+  
+  const query = "SELECT photo, photo_type FROM photo_files WHERE photo_id = ?";
+  
+  db.query(query, [photo_id], (err, results) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+    
+    if (results.length === 0 || !results[0].photo) {
+      console.error(`Image not found for ID: ${photo_id}`);
+      return res.status(404).send("Image not found");
+    }
+    
+    const imagePath = results[0].photo;
+    const contentType = results[0].photo_type || 'image/jpeg';
+    
+    // If it's a file path (new format)
+    if (imagePath.startsWith('/root/')) {
+      // Use the same path resolution logic as the delete endpoint
+      const serverRootDir = path.join(__dirname, '..');
+      const relativePath = imagePath;
+      const fullPath = path.join(serverRootDir, relativePath);
+      
+      
+      if (fs.existsSync(fullPath)) {
+        res.setHeader('Content-Type', contentType);
+        return res.sendFile(fullPath);
+      }
+      
+      // Try alternative path as fallback
+      const altPath = path.resolve(serverRootDir, `.${relativePath}`);
+      
+      if (fs.existsSync(altPath)) {
+  
+        res.setHeader('Content-Type', contentType);
+        return res.sendFile(altPath);
+      }
+      
+      console.error(`File not found at path: ${fullPath} or ${altPath}`);
+      return res.status(404).send(`Image file not found on server`);
+    } 
+    // If it's base64 (old format)
+    else if (imagePath.startsWith('data:')) {
+      try {
+        // Extract content type and base64 data
+        const matches = imagePath.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        
+        if (!matches || matches.length !== 3) {
+          console.error(`Invalid image data format: ${imagePath.substring(0, 30)}...`);
+          return res.status(400).send("Invalid image data format");
+        }
+        
+        const base64Data = matches[2];
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        res.setHeader('Content-Type', matches[1]);
+        return res.send(buffer);
+      } catch (error) {
+        console.error("Error processing base64 image:", error);
+        return res.status(500).send("Error processing image");
+      }
+    } else {
+      console.error(`Invalid image path format: ${imagePath.substring(0, 30)}...`);
+      return res.status(400).send("Invalid image format");
+    }
+  });
+});
+
+// Fix the delete photo endpoint with more robust path handling
+
+
+// Also add a non-owner prefix version for backward compatibility
+router.get("/portfolio-image/:photo_id", (req, res) => {
+  const url = `/owner/portfolio-image/${req.params.photo_id}`;
+  console.log(`Redirecting from /portfolio-image to ${url}`);
+  // Forward the request
+  req.url = url;
+  router.handle(req, res);
+});
+
+// Add endpoint to get all portfolio images for a user
+router.post("/owner_drive/get_portfolio", (req, res) => {
+  const { email } = req.body;
+  
+  if (!email) {
+    return res.status(400).json({ 
+      success: false, 
+      message: "User email is required" 
+    });
+  }
+  
+  const query = "SELECT photo_id, photo_name, photo_type, photo FROM photo_files WHERE user_email = ?";
+  
+  db.query(query, [email], (err, results) => {
+    if (err) {
+      console.error("Error fetching portfolio:", err);
+      return res.status(500).json({ 
+        success: false, 
+        message: "Failed to fetch portfolio images" 
+      });
+    }
+    
+    // Return the files with the id and path for the client to construct URLs
+    const files = results.map(file => {
+      return {
+        photo_id: file.photo_id,
+        photo_name: file.photo_name,
+        photo_type: file.photo_type,
+        photo: file.photo // Return the raw path/data, client will construct proper URL
+      };
+    });
+    
+    res.json({
+      success: true,
+      files: files
+    });
+  });
+});
+
+// Add endpoint to delete a portfolio image
+router.post("/owner_drive/delete-photo", (req, res) => {
+  const { user_email, photo_id } = req.body;
+  
+  console.log(`Delete request - User: ${user_email}, Photo ID: ${photo_id}`);
+  
+  if (!user_email || !photo_id) {
+    return res.status(400).json({ 
+      success: false, 
+      error: "User email and photo ID are required" 
+    });
+  }
+  
+  // First, get the photo path to delete the actual file
+  const getPhotoQuery = "SELECT photo, photo_name FROM photo_files WHERE photo_id = ? AND user_email = ?";
+  
+  db.query(getPhotoQuery, [photo_id, user_email], (err, results) => {
+    if (err) {
+      console.error("Error fetching photo path:", err);
+      return res.status(500).json({ success: false, error: "Database error" });
+    }
+    
+    if (results.length === 0) {
+      console.error(`Photo not found - ID: ${photo_id}, User: ${user_email}`);
+      return res.status(404).json({ success: false, error: "Photo not found" });
+    }
+    
+    const photoPath = results[0].photo;
+    const photoName = results[0].photo_name;
+    console.log(`Found photo to delete in DB: ${photoPath}, Name: ${photoName}`);
+    
+    // Delete from database first
+    const deleteQuery = "DELETE FROM photo_files WHERE photo_id = ? AND user_email = ?";
+    
+    db.query(deleteQuery, [photo_id, user_email], (deleteErr, deleteResult) => {
+      if (deleteErr) {
+        console.error("Error deleting photo from database:", deleteErr);
+        return res.status(500).json({ success: false, error: "Database error" });
+      }
+      
+      console.log(`Successfully deleted from database`);
+      
+      // After database delete is successful, try to delete the physical file
+      let fileDeleted = false;
+      
+      try {
+        // Get the exact filename from the path
+        const filename = photoPath.split('/').pop();
+        console.log(`Filename to delete: ${filename}`);
+        
+        // Direct server path from logs
+        const directPath = `C:\\Users\\DELL\\Desktop\\server\\root\\${user_email}\\drive\\portfolio\\${filename}`;
+        console.log(`Trying to delete file at: ${directPath}`);
+        
+        if (fs.existsSync(directPath)) {
+          fs.unlinkSync(directPath);
+          console.log(`Successfully deleted file: ${directPath}`);
+          fileDeleted = true;
+        } else {
+          // Try the portfolio directory scan approach
+          const portfolioDir = `C:\\Users\\DELL\\Desktop\\server\\root\\${user_email}\\drive\\portfolio`;
+          console.log(`Checking portfolio directory: ${portfolioDir}`);
+          
+          if (fs.existsSync(portfolioDir)) {
+            const files = fs.readdirSync(portfolioDir);
+            
+            if (files.length > 0) {
+              // Extract original filename part
+              const parts = filename.split('-');
+              if (parts.length >= 3) {
+                const originalName = parts.slice(2).join('-');
+                console.log(`Looking for files containing: ${originalName}`);
+                
+                // Find matching files
+                const matchingFiles = files.filter(f => f.includes(originalName));
+                console.log(`Found ${matchingFiles.length} matching files`);
+                
+                // Delete matching files
+                for (const matchFile of matchingFiles) {
+                  const fullPath = path.join(portfolioDir, matchFile);
+                  try {
+                    fs.unlinkSync(fullPath);
+                    console.log(`Deleted matching file: ${fullPath}`);
+                    fileDeleted = true;
+                  } catch (e) {
+                    console.error(`Failed to delete: ${e.message}`);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (fileErr) {
+        console.error(`Error deleting file: ${fileErr.message}`);
+      }
+      
+      // Always return success since we deleted the database entry
+      return res.status(200).json({
+        success: true,
+        message: "Photo deleted successfully", 
+        fileDeleted: fileDeleted
+      });
+    });
+  });
+});
+
+router.delete("/api/delete-photo", (req, res) => {
+  const user_email = req.headers['x-user-email'];
+  const fileName = req.headers['x-file-name']; 
+  const photoId = req.headers['x-photo-id'];
+
+  if (!user_email || (!fileName && !photoId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing required headers (x-user-email and either x-file-name or x-photo-id)"
+    });
+  }
+
+  // If we have a filename, try to delete the file directly
+  if (fileName) {
+    const filePath = path.join(__dirname, '..', 'root', user_email, 'drive', 'portfolio', fileName);
+    
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        console.error("File deletion failed:", err);
+        
+        // If file deletion failed and we have a photo ID, try to delete by ID
+        if (photoId) {
+          deleteByPhotoId(user_email, photoId, res);
+        } else {
+          // Just delete from database if file not found
+          deleteFromDatabase(user_email, fileName, null, res);
+        }
+      } else {
+        console.log("File deleted from disk:", filePath);
+        deleteFromDatabase(user_email, fileName, null, res);
+      }
+    });
+  } else if (photoId) {
+    // If we only have photo ID, use that for deletion
+    deleteByPhotoId(user_email, photoId, res);
+  }
+});
+
+// Helper function to delete photo by ID
+function deleteByPhotoId(user_email, photoId, res) {
+  // First get the filename from database
+  const queryFind = "SELECT photo FROM photo_files WHERE photo_id = ? AND user_email = ?";
+  
+  db.execute(queryFind, [photoId, user_email], (err, results) => {
+    if (err) {
+      console.error("Database query failed:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error while finding photo"
+      });
+    }
+    
+    if (results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Photo not found in database"
+      });
+    }
+    
+    const photoPath = results[0].photo;
+    let fileName = null;
+    
+    // Try to extract filename to delete the file
+    if (photoPath && photoPath.includes('/')) {
+      const pathParts = photoPath.split('/');
+      fileName = pathParts[pathParts.length - 1];
+      
+      // Try to delete the actual file
+      const filePath = path.join(__dirname, '..', 'root', user_email, 'drive', 'portfolio', fileName);
+      
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          console.error("File deletion failed (by ID):", err);
+          // Continue with database deletion even if file deletion fails
+        } else {
+          console.log("File deleted from disk (by ID):", filePath);
+        }
+        
+        // Delete from database
+        deleteFromDatabase(user_email, null, photoId, res);
+      });
+    } else {
+      // If no filename found, just delete the database entry
+      deleteFromDatabase(user_email, null, photoId, res);
+    }
+  });
+}
+
+// Helper function to delete from database
+function deleteFromDatabase(user_email, fileName, photoId, res) {
+  let query;
+  let params;
+  
+  if (fileName) {
+    const fileUrlPath = `/root/${user_email}/drive/portfolio/${fileName}`;
+    query = "DELETE FROM photo_files WHERE photo = ? AND user_email = ?";
+    params = [fileUrlPath, user_email];
+  } else if (photoId) {
+    query = "DELETE FROM photo_files WHERE photo_id = ? AND user_email = ?";
+    params = [photoId, user_email];
+  } else {
+    return res.status(400).json({
+      success: false,
+      message: "Missing filename or photo ID for database deletion"
+    });
+  }
+
+  db.execute(query, params, (err, result) => {
+    if (err) {
+      console.error("DB delete failed:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to delete from database"
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Photo deleted successfully",
+      databaseRowsDeleted: result.affectedRows
+    });
+  });
+}
+
+// Endpoint to get file information by ID
+router.get("/portfolio-image-info/:id", (req, res) => {
+  const photoId = req.params.id;
+  const user_email = req.headers['x-user-email'];
+
+  if (!photoId || !user_email) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing photo ID or user email"
+    });
+  }
+
+  // Query the database to get the file path
+  const query = "SELECT photo, photo_name FROM photo_files WHERE photo_id = ? AND user_email = ?";
+  db.execute(query, [photoId, user_email], (err, results) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error"
+      });
+    }
+
+    if (results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "File not found"
+      });
+    }
+
+    const photoPath = results[0].photo;
+    const photoName = results[0].photo_name;
+    
+    // Extract the filename from the path
+    let fileName = "";
+    if (photoPath && photoPath.includes('/')) {
+      const pathParts = photoPath.split('/');
+      fileName = pathParts[pathParts.length - 1];
+    } else {
+      fileName = photoName || photoId.toString();
+    }
+
+    res.json({
+      success: true,
+      fileName: fileName,
+      photoPath: photoPath,
+      photoName: photoName
+    });
+  });
+});
+
+// Simplified delete endpoint that works directly with photo ID
+router.delete("/api/delete-photo-by-id/:id", (req, res) => {
+  const photoId = req.params.id;
+  const user_email = req.headers['x-user-email'];
+
+  if (!photoId || !user_email) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing photo ID or user email"
+    });
+  }
+
+  console.log(`Attempting to delete photo ID: ${photoId} for user: ${user_email}`);
+
+  // First get the complete file info from database
+  const queryFind = "SELECT photo, photo_name FROM photo_files WHERE photo_id = ? AND user_email = ?";
+  
+  db.execute(queryFind, [photoId, user_email], (err, results) => {
+    if (err) {
+      console.error("Database query failed:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Database error while finding photo"
+      });
+    }
+    
+    if (results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Photo not found in database"
+      });
+    }
+    
+    const photoPath = results[0].photo;
+    let filePath = null;
+    
+    // Try to extract filename and create full filesystem path
+    if (photoPath && photoPath.startsWith('/root/')) {
+      // Example: /root/user@example.com/drive/portfolio/filename.jpg
+      // We need to extract the relative path after /root/ and join with __dirname/..
+      const relativePath = photoPath.substring(6); // Remove '/root/' prefix
+      filePath = path.join(__dirname, '..', 'root', relativePath);
+      
+      console.log(`Attempting to delete file: ${filePath}`);
+      
+      // Try to delete the file, but continue with DB deletion regardless
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          console.error(`File deletion error: ${err.message}`);
+          // Continue with database deletion even if file deletion fails
+        } else {
+          console.log(`Successfully deleted file: ${filePath}`);
+        }
+        
+        // Delete database entry
+        deletePhotoFromDB(photoId, user_email, res);
+      });
+    } else {
+      // If we can't determine the file path, just delete the database entry
+      console.log(`No valid file path found, deleting database entry only`);
+      deletePhotoFromDB(photoId, user_email, res);
+    }
+  });
+});
+
+// Helper function to delete photo entry from database
+function deletePhotoFromDB(photoId, user_email, res) {
+  const query = "DELETE FROM photo_files WHERE photo_id = ? AND user_email = ?";
+  
+  db.execute(query, [photoId, user_email], (err, result) => {
+    if (err) {
+      console.error("Database deletion error:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to delete photo from database"
+      });
+    }
+    
+    console.log(`Successfully deleted photo ID ${photoId} from database`);
+    res.json({
+      success: true,
+      message: "Photo deleted successfully",
+      affectedRows: result.affectedRows
+    });
+  });
+}
+
+// Route to serve folder thumbnail images
+router.get("/portfolio-image/folder-thumbnail/:path(*)", (req, res) => {
+  try {
+    const imagePath = req.params.path;
+    const fullPath = path.join(rootDirectory, imagePath);
+    
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).send("Image not found");
+    }
+    
+    // Serve the file
+    res.sendFile(fullPath);
+  } catch (error) {
+    console.error("Error serving folder thumbnail:", error);
+    res.status(500).send("Error serving image");
+  }
+});
+
+// Direct file upload to folder without base64 encoding
+router.post("/owner-folders/upload-direct", (req, res) => {
+  // We'll use a simple multipart form parser instead of multer
+  const busboy = require('busboy');
+  const path = require('path');
+  const fs = require('fs');
+  
+  try {
+    console.log("Upload-direct endpoint hit");
+    console.log("Content-Type:", req.headers['content-type']);
+    
+    const bb = busboy({ headers: req.headers });
+    
+    // Variables to collect form data
+    let folder_id;
+    let user_email;
+    let folder_name;
+    const uploadedFiles = [];
+    let fileCount = 0; // Count of files processed
+    let completedCount = 0; // Count of files successfully processed
+    
+    // Handle regular form fields
+    bb.on('field', (name, val) => {
+      console.log(`Field received: ${name} = ${val}`);
+      if (name === 'folder_id') folder_id = val;
+      if (name === 'user_email') user_email = val;
+      if (name === 'folder_name') folder_name = val;
+    });
+    
+    // Handle file fields
+    bb.on('file', (name, file, info) => {
+      console.log(`File received: ${name}, filename: ${info.filename}, mimeType: ${info.mimeType}`);
+      fileCount++;
+      
+      if (name !== 'files') {
+        console.log(`Skipping file with field name: ${name}`);
+        file.resume(); // Skip this file if field name is not 'files'
+        return;
+      }
+      
+      const { filename, mimeType } = info;
+      
+      // Make sure required data is available
+      if (!user_email || !folder_name) {
+        console.log("Missing user_email or folder_name, cannot save file");
+        file.resume(); // Skip this file
+        return;
+      }
+      
+      // Create directories if they don't exist
+      const serverRootDir = path.join(__dirname, '..');
+      const baseDir = path.join(serverRootDir, 'root');
+      const userDir = path.join(baseDir, user_email);
+      const driveDir = path.join(userDir, 'drive');
+      const portfolioDir = path.join(driveDir, 'portfolio');
+      const foldersDir = path.join(portfolioDir, 'folders');
+      const folderDir = path.join(foldersDir, folder_name);
+      
+      // Log paths for debugging
+      console.log("Saving file to:", folderDir);
+      
+      // Create directory structure if it doesn't exist
+      try {
+        fs.mkdirSync(folderDir, { recursive: true });
+      } catch (dirErr) {
+        console.error("Error creating directories:", dirErr);
+      }
+      
+      // Generate unique filename to avoid conflicts
+      const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const safeFileName = uniquePrefix + '-' + filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const filePath = path.join(folderDir, safeFileName);
+      
+      // Construct the relative path as stored in the database
+      const fileUrlPath = `/root/${user_email}/drive/portfolio/folders/${folder_name}/${safeFileName}`;
+      
+      // Create write stream and pipe file to it
+      const writeStream = fs.createWriteStream(filePath);
+      
+      // Add to list of files being processed
+      const fileInfo = {
+        name: filename,
+        type: mimeType,
+        path: fileUrlPath
+      };
+      
+      // Track completion
+      let fileWritten = false;
+      
+      // Handle file completion
+      writeStream.on('finish', () => {
+        console.log(`File saved: ${filePath}`);
+        fileWritten = true;
+        uploadedFiles.push(fileInfo);
+        completedCount++;
+      });
+      
+      // Handle errors
+      writeStream.on('error', (err) => {
+        console.error('Error writing file:', err);
+      });
+      
+      // Pipe the file data to the file
+      file.pipe(writeStream);
+    });
+    
+    // Handle parsing completion
+    bb.on('finish', () => {
+      console.log("Finished processing request", { 
+        folder_id, 
+        uploadedFiles: uploadedFiles.length,
+        totalFiles: fileCount,
+        completedFiles: completedCount
+      });
+      
+      if (!folder_id) {
+        return res.status(400).json({ error: "Missing folder ID" });
+      }
+      
+      // Wait a bit for any file writes to complete
+      setTimeout(() => {
+        if (uploadedFiles.length === 0) {
+          return res.status(400).json({ error: "No files uploaded" });
+        }
+        
+        // Insert file records in database
+        const query = `
+          INSERT INTO owner_folders_files (folder_id, file_name, file_type, file_data)
+          VALUES (?, ?, ?, ?)
+        `;
+        
+        const insertPromises = uploadedFiles.map((file) => {
+          return new Promise((resolve, reject) => {
+            db.query(
+              query,
+              [folder_id, file.name, file.type, file.path],
+              (err, result) => {
+                if (err) reject(err);
+                else resolve({...result, fileName: file.name});
+              }
+            );
+          });
+        });
+        
+        Promise.all(insertPromises)
+          .then((results) => {
+            res.status(201).json({ 
+              message: "Files uploaded successfully",
+              files: uploadedFiles.map(f => f.name),
+              total: fileCount,
+              completed: completedCount,
+              results: results.map(r => ({ id: r.insertId, name: r.fileName }))
+            });
+          })
+          .catch((err) => {
+            console.error("Error inserting file records:", err);
+            res.status(500).json({ error: "Error uploading files" });
+          });
+      }, 1000); // Wait 1 second to make sure all file writes are complete
+    });
+    
+    // Handle parsing errors
+    bb.on('error', (err) => {
+      console.error('Busboy error:', err);
+      res.status(500).json({ error: "Error parsing upload request" });
+    });
+    
+    // Pipe request to busboy for processing
+    req.pipe(bb);
+  }
+  catch (error) {
+    console.error("Server error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Serve file images by path
+router.get("/portfolio-image-file", (req, res) => {
+  const filePath = req.query.path;
+  
+  if (!filePath) {
+    return res.status(400).send("Missing file path");
+  }
+  
+  
+  try {
+    // The path stored in the database starts with /root/
+    // Need to resolve to the actual file location on the server
+    const serverRootDir = path.join(__dirname, '..');
+    const fullPath = path.join(serverRootDir, filePath);
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      console.error(`File not found at path: ${fullPath}`);
+      
+      // Try an alternative path as a fallback
+      const altPath = path.join(path.dirname(serverRootDir), "root", filePath.replace('/root/', ''));
+      console.log("Trying alternative path:", altPath);
+      
+      if (fs.existsSync(altPath)) {
+        console.log("File found at alternative path");
+        
+        // Determine content type based on file extension
+        const ext = path.extname(altPath).toLowerCase();
+        let contentType = 'application/octet-stream'; // Default
+        
+        // Set appropriate content type based on file extension
+        switch (ext) {
+          case '.jpg':
+          case '.jpeg':
+            contentType = 'image/jpeg';
+            break;
+          case '.png':
+            contentType = 'image/png';
+            break;
+          case '.gif':
+            contentType = 'image/gif';
+            break;
+          case '.pdf':
+            contentType = 'application/pdf';
+            break;
+          case '.mp4':
+            contentType = 'video/mp4';
+            break;
+        }
+        
+        // Set content type and send file
+        res.setHeader('Content-Type', contentType);
+        return res.sendFile(altPath);
+      }
+      
+      return res.status(404).send("File not found");
+    }
+    
+    // Determine content type based on file extension
+    const ext = path.extname(fullPath).toLowerCase();
+    let contentType = 'application/octet-stream'; // Default
+    
+    // Set appropriate content type based on file extension
+    switch (ext) {
+      case '.jpg':
+      case '.jpeg':
+        contentType = 'image/jpeg';
+        break;
+      case '.png':
+        contentType = 'image/png';
+        break;
+      case '.gif':
+        contentType = 'image/gif';
+        break;
+      case '.pdf':
+        contentType = 'application/pdf';
+        break;
+      case '.mp4':
+        contentType = 'video/mp4';
+        break;
+    }
+    
+    // Set content type and send file
+    res.setHeader('Content-Type', contentType);
+    res.sendFile(fullPath);
+  } 
+  catch (error) {
+    console.error("Error serving file:", error);
+    res.status(500).send("Server error");
+  }
+});
+
+// Create an alias route for the portfolio-image-file endpoint for backward compatibility
+router.get("/owner/portfolio-image-file", (req, res) => {
+  // Forward the request to the /portfolio-image-file endpoint
+  req.url = "/portfolio-image-file";
+  router.handle(req, res);
+});
 
 module.exports = router;
