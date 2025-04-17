@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Team Invitation Status</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding-top: 50px;
+    }
+    .icon {
+      font-size: 64px;
+    }
+    .confirmed {
+      color: green;
+    }
+    .rejected {
+      color: red;
+    }
+    .pending {
+      color: orange;
+    }
+  </style>
+</head>
+<body>
+  <div id="status-container"></div>
+
+  <script>
+    const status = "{{status}}";
+
+    const container = document.getElementById("status-container");
+
+    if (status === "Confirmed") {
+      container.innerHTML = `
+        <div class="icon confirmed">✅</div>
+        <h1>You’ve been successfully added to the team! 🎉</h1>
+        <p>Status: <strong>${status}</strong></p>
+      `;
+    } else if (status === "Rejected") {
+      container.innerHTML = `
+        <div class="icon rejected">❌</div>
+        <h1>Your invitation has been rejected.</h1>
+        <p>Status: <strong>${status}</strong></p>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="icon pending">⌛</div>
+        <h1>Your invitation is still pending...</h1>
+        <p>Status: <strong>${status}</strong></p>
+      `;
+    }
+  </script>
+</body>
+</html>

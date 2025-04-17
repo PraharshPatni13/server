@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team Member Invitation</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #f4f6f8;
+        margin: 0;
+        padding: 0;
+      }
+      .container {
+        max-width: 600px;
+        margin: 50px auto;
+        background-color: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        padding: 30px;
+      }
+      .header {
+        text-align: center;
+        border-bottom: 1px solid #e0e0e0;
+        padding-bottom: 20px;
+      }
+      .header h1 {
+        color: #3d5cb8;
+        margin: 0;
+        font-size: 28px;
+      }
+      .business-name {
+        color: #3d5cb8;
+        font-weight: bold;
+        font-size: 20px;
+      }
+      .content {
+        margin-top: 20px;
+        color: #333333;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+      .highlight {
+        font-weight: bold;
+        color: #3d5cb8;
+      }
+      .button-container {
+        margin-top: 30px;
+        text-align: center;
+      }
+      .confirm-button {
+        background-color: #3d5cb8;
+        color: white;
+        padding: 12px 30px;
+        font-size: 16px;
+        border: none;
+        border-radius: 5px;
+        text-decoration: none;
+        display: inline-block;
+        font-weight: 600;
+        transition: background-color 0.3s ease;
+      }
+      .confirm-button:hover {
+        background-color: #2d4494;
+      }
+      .expiry-note {
+        margin-top: 20px;
+        padding: 10px 15px;
+        background-color: #fff8e0;
+        border-left: 4px solid #ffc107;
+        border-radius: 4px;
+      }
+      .footer {
+        margin-top: 40px;
+        font-size: 14px;
+        color: #888888;
+        text-align: center;
+        border-top: 1px solid #e0e0e0;
+        padding-top: 20px;
+      }
+      .social-links {
+        margin-top: 15px;
+        text-align: center;
+      }
+      .social-links a {
+        display: inline-block;
+        margin: 0 10px;
+        color: #3d5cb8;
+        text-decoration: none;
+      }
+      .profile-img {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin: 0 auto 15px;
+        display: block;
+        border: 3px solid #3d5cb8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <img src="{{ownerProfileImg}}" alt="Profile" class="profile-img" />
+        <h1>Team Membership Invitation</h1>
+      </div>
+      <div class="content">
+        <p>Hello <span class="highlight">{{memberName}}</span>,</p>
+        <p>
+          <span class="highlight">{{ownerName}}</span> from
+          <span class="business-name">{{businessName}}</span> has invited you to
+          join their team as a <span class="highlight">{{memberRole}}</span>.
+        </p>
+        <p>
+          Join their team to collaborate on photography projects and grow
+          together professionally.
+        </p>
+        <div class="expiry-note">
+          <p>
+            <strong>Note:</strong> This invitation will expire in
+            <strong>7 days</strong> from the date of this email.
+          </p>
+        </div>
+      </div>
+      <div class="button-container">
+        <a href="{{confirmationLink}}" class="confirm-button"
+          >Accept Invitation</a
+        >
+      </div>
+      <div class="footer">
+        <p>If you have any questions, please contact {{ownerEmail}}.</p>
+        <p>
+          This is an official communication. Please do not share it externally.
+        </p>
+        <div class="social-links">
+          <a href="#">Website</a> | <a href="#">Instagram</a> |
+          <a href="#">Facebook</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
