@@ -805,13 +805,27 @@ router.get("/confirmation/:member_id", (req, res) => {
     }
 
     if (results.length === 0) {
-      return res.status(404).send("Member not found");
+      const file_path = "Member_not_found.html"
+      const full_path = path.join(__dirname, file_path);
+      fs.readFile(full_path, 'utf8', (readErr, html) => {
+        if (readErr) {
+          console.error("Error reading confirmation template:", readErr);
+          return res.status(500).send("Error loading confirmation page");
+        }
+
+        const renderedHtml = html
+          .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL)
+
+          return res.send(renderedHtml);
+      });
+      return;
     }
 
     const currentStatus = results[0].member_status;
 
     if (currentStatus === "Confirmed" || currentStatus === "Rejected") {
       // Don't allow re-confirmation or change
+      console.log("Member is already " + currentStatus);
       return res.status(403).send("Action not allowed. Member is already " + currentStatus);
     }
 

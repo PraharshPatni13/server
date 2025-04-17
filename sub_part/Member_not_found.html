@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Not Found</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 600px;
+            margin: 30px auto;
+            background: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            text-align: center;
+        }
+        .app-logo {
+            display: block;
+            max-width: 300px;
+            max-height: 100px;
+            width: auto;
+            height: auto;
+            margin: 30px auto 10px auto;
+        }
+        .content {
+            padding: 30px;
+        }
+        .error-box {
+            background: #f8d7da;
+            border: 2px dashed #e74c3c;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .error-message {
+            font-size: 22px;
+            font-weight: bold;
+            color: #721c24;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            border-top: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img class="app-logo" src="{{SERVER_URL}}/get_img_for_html_url" alt="App Logo">
+
+        <div class="content">
+            <h2 style="color: #2c3e50;">Hello dear user,</h2>
+            <p>We tried our best to find the member you're looking for, but unfortunately, we couldn't locate any matching records.</p>
+
+            <div class="error-box">
+                <div class="error-message">Member Not Found</div>
+            </div>
+
+            <p>Please double-check the information and try again.<br>If you believe this is an error, feel free to reach out to our support team for help.</p>
+        </div>
+
+        <div class="footer">
+            <p style="margin: 0; color: #666; font-size: 14px;">© 2024 Framelab Nation. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
