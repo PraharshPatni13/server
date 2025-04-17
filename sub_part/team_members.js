@@ -778,7 +778,8 @@ router.get("/accept-invitation/:member_id", (req, res) => {
           .replace(/{{member_role}}/g, member.member_role || "Role")
           .replace(/{{member_id}}/g, member.member_id.toString())
           .replace(/{{accept_route}}/g, accept_route)
-          .replace(/{{reject_route}}/g, reject_route);
+          .replace(/{{reject_route}}/g, reject_route)
+          .replace(/{{SERVER_URL}}/g,process.env.SERVER_URL);
 
         res.send(renderedHtml);
       });
