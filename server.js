@@ -251,6 +251,13 @@ app.use("/", praharsh_routes);
 // praharsh  End ----
 
 
+app.get('/get_img_for_html_url', (req, res) => {
+  const imagePath = "sub_part/Images/WebsiteLogo/logoWithNameBlue.png"
+    const fullPath = path.join(__dirname, imagePath);
+  res.sendFile(fullPath);
+});
+
+
 const PORT = 4000;
 server.listen(PORT, () => {
   console.log(`Server is running. .. . . . .`);
