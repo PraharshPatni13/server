@@ -787,7 +787,7 @@ router.get("/accept-invitation/:member_id", (req, res) => {
 });
 
 
-
+// confirm invitation 
 router.get("/confirmation/:member_id", (req, res) => {
   const { member_id } = req.params;
 
@@ -842,9 +842,7 @@ router.get("/confirmation/:member_id", (req, res) => {
   });
 });
 
-
-
-// Add endpoint to reject invitation
+// reject invitation
 router.get("/rejection/:member_id", (req, res) => {
   const { member_id } = req.params;
   console.log("member id ", member_id);

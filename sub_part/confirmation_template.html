@@ -1,55 +1,180 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Team Invitation Status</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding-top: 50px;
-    }
-    .icon {
-      font-size: 64px;
-    }
-    .confirmed {
-      color: green;
-    }
-    .rejected {
-      color: red;
-    }
-    .pending {
-      color: orange;
-    }
-  </style>
-</head>
-<body>
-  <div id="status-container"></div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team Invitation Status</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Roboto", sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background-color: #f8f9fa;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        text-align: center;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        margin-top: 50px;
+      }
+      .logo {
+        margin-bottom: 30px;
+      }
+      .illustration {
+        width: 200px;
+        height: 200px;
+        margin: 0 auto 30px;
+      }
+      h1 {
+        font-size: 28px;
+        margin-bottom: 15px;
+        color: #2d3748;
+      }
+      .status {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 30px;
+        font-weight: 500;
+        margin-bottom: 20px;
+      }
+      .confirmed {
+        background-color: #ebf7ee;
+        color: #0f7b3e;
+      }
+      .rejected {
+        background-color: #fbecec;
+        color: #ce3d3d;
+      }
+      .pending {
+        background-color: #fff8eb;
+        color: #b5831b;
+      }
+      .already-processed {
+        background-color: #f0f2ff;
+        color: #4353aa;
+      }
+      p {
+        margin-bottom: 20px;
+        font-size: 16px;
+        color: #4a5568;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      footer {
+        margin-top: 50px;
+        font-size: 14px;
+        color: #718096;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" id="status-container"></div>
 
-  <script>
-    const status = "{{status}}";
+    <script>
+      const status = "{{status}}";
+      const originalStatus = "{{original_status}}";
+      const isAlreadyProcessed =
+        ["Confirmed", "Rejected"].includes(originalStatus) &&
+        status === "AlreadyProcessed";
+      const container = document.getElementById("status-container");
 
-    const container = document.getElementById("status-container");
-
-    if (status === "Confirmed") {
-      container.innerHTML = `
-        <div class="icon confirmed">✅</div>
-        <h1>You’ve been successfully added to the team! 🎉</h1>
-        <p>Status: <strong>${status}</strong></p>
+      if (status === "Confirmed") {
+        container.innerHTML = `
+        <div class="logo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="120" height="30" viewBox="0 0 120 30">
+            <text x="0" y="20" font-family="Roboto" font-size="20" font-weight="bold">TeamConnect</text>
+          </svg>
+        </div>
+        <div class="illustration">
+          <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#0f7b3e" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+          </svg>
+        </div>
+        <h1>Welcome to the Team!</h1>
+        <div class="status confirmed">Invitation Confirmed</div>
+        <p>Your team invitation has been successfully accepted. You now have access to all team resources and can begin collaborating with your colleagues.</p>
+        <p>You'll receive a follow-up email shortly with next steps and important information to get you started.</p>
+        <footer>© ${new Date().getFullYear()} TeamConnect. All rights reserved.</footer>
       `;
-    } else if (status === "Rejected") {
-      container.innerHTML = `
-        <div class="icon rejected">❌</div>
-        <h1>Your invitation has been rejected.</h1>
-        <p>Status: <strong>${status}</strong></p>
+      } else if (status === "Rejected") {
+        container.innerHTML = `
+        <div class="logo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="120" height="30" viewBox="0 0 120 30">
+            <text x="0" y="20" font-family="Roboto" font-size="20" font-weight="bold">TeamConnect</text>
+          </svg>
+        </div>
+        <div class="illustration">
+          <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#ce3d3d" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="15" y1="9" x2="9" y2="15"></line>
+            <line x1="9" y1="9" x2="15" y2="15"></line>
+          </svg>
+        </div>
+        <h1>Invitation Declined</h1>
+        <div class="status rejected">Invitation Rejected</div>
+        <p>You have declined the team invitation. If this was done in error, please contact the team administrator to receive a new invitation.</p>
+        <p>Thank you for your consideration.</p>
+        <footer>© ${new Date().getFullYear()} TeamConnect. All rights reserved.</footer>
       `;
-    } else {
-      container.innerHTML = `
-        <div class="icon pending">⌛</div>
-        <h1>Your invitation is still pending...</h1>
-        <p>Status: <strong>${status}</strong></p>
+      } else if (isAlreadyProcessed) {
+        container.innerHTML = `
+        <div class="logo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="120" height="30" viewBox="0 0 120 30">
+            <text x="0" y="20" font-family="Roboto" font-size="20" font-weight="bold">TeamConnect</text>
+          </svg>
+        </div>
+        <div class="illustration">
+          <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#4353aa" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h1>Invitation Already Processed</h1>
+        <div class="status already-processed">Status: ${originalStatus}</div>
+        <p>This invitation has already been ${originalStatus.toLowerCase()}. No further action is required from your end.</p>
+        <p>If you have any questions or need assistance, please contact your team administrator.</p>
+        <footer>© ${new Date().getFullYear()} TeamConnect. All rights reserved.</footer>
       `;
-    }
-  </script>
-</body>
+      } else {
+        container.innerHTML = `
+        <div class="logo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="120" height="30" viewBox="0 0 120 30">
+            <text x="0" y="20" font-family="Roboto" font-size="20" font-weight="bold">TeamConnect</text>
+          </svg>
+        </div>
+        <div class="illustration">
+          <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#b5831b" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="6" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h1>Invitation Pending</h1>
+        <div class="status pending">Awaiting Response</div>
+        <p>Your team invitation is still pending a response. Please click the confirmation or rejection link in your invitation email to complete the process.</p>
+        <p>If you need a new invitation link or have any questions, please contact your team administrator.</p>
+        <footer>© ${new Date().getFullYear()} TeamConnect. All rights reserved.</footer>
+      `;
+      }
+    </script>
+  </body>
 </html>
