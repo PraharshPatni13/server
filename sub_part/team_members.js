@@ -779,7 +779,7 @@ router.get("/accept-invitation/:member_id", (req, res) => {
           .replace(/{{member_id}}/g, member.member_id.toString())
           .replace(/{{accept_route}}/g, accept_route)
           .replace(/{{reject_route}}/g, reject_route)
-          .replace(/{{SERVER_URL}}/g,process.env.SERVER_URL);
+          .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL);
 
         res.send(renderedHtml);
       });
@@ -796,7 +796,6 @@ router.get("/confirmation/:member_id", (req, res) => {
     return res.status(400).send("Member ID is required");
   }
 
-  // Step 1: Check current member_status
   const checkStatusQuery = "SELECT member_status FROM team_member WHERE member_id = ?";
   db.query(checkStatusQuery, [member_id], (checkErr, results) => {
     if (checkErr) {
@@ -811,8 +810,24 @@ router.get("/confirmation/:member_id", (req, res) => {
     const currentStatus = results[0].member_status;
 
     if (currentStatus === "Confirmed" || currentStatus === "Rejected") {
-      // Don't allow re-confirmation or change
-      return res.status(403).send("Action not allowed. Member is already " + currentStatus);
+      // Already confirmed/rejected — return a message
+      const filePath = path.join(__dirname, 'confirmation_template.html'); // Make sure this matches your file
+      return fs.readFile(filePath, 'utf8', (readErr, html) => {
+        if (readErr) {
+          console.error('Error reading template:', readErr);
+          return res.status(500).send('Error loading invitation page');
+        }
+
+        const msg = currentStatus === "Confirmed"
+          ? "You’ve already accepted the invitation ✅"
+          : "You’ve already rejected the invitation ❌";
+
+        const renderedHtml = html
+          .replace(/{{status}}/g, currentStatus)
+          .replace(/{{message}}/g, msg);
+
+        return res.send(renderedHtml);
+      });
     }
 
     // Step 2: Update to Confirmed
@@ -825,8 +840,7 @@ router.get("/confirmation/:member_id", (req, res) => {
 
       req.io.emit(`user_confirmation_updated_team_member`);
 
-      // Step 3: Send Confirmation HTML
-      const filePath = path.join(__dirname, 'confirmation_template.html');
+      const filePath = path.join(__dirname, 'confirmation_template.html'); // Match the correct file
       fs.readFile(filePath, 'utf8', (readErr, html) => {
         if (readErr) {
           console.error("Error reading confirmation template:", readErr);
@@ -842,6 +856,7 @@ router.get("/confirmation/:member_id", (req, res) => {
     });
   });
 });
+
 
 // reject invitation
 router.get("/rejection/:member_id", (req, res) => {
@@ -866,10 +881,27 @@ router.get("/rejection/:member_id", (req, res) => {
 
     const currentStatus = results[0].member_status;
 
+    // If already confirmed or rejected, show proper UI
     if (currentStatus === "Confirmed" || currentStatus === "Rejected") {
-      return res
-        .status(403)
-        .send("Action not allowed. Member is already " + currentStatus);
+      const filePath = path.join(__dirname, "confirmation_template.html"); // Make sure filename is correct
+
+      return fs.readFile(filePath, "utf8", (readErr, html) => {
+        if (readErr) {
+          console.error("Error loading HTML file:", readErr);
+          return res.status(500).send("Error loading confirmation page");
+        }
+
+        const msg =
+          currentStatus === "Confirmed"
+            ? "You’ve already accepted the invitation ✅"
+            : "You’ve already rejected the invitation ❌";
+
+        const renderedHtml = html
+          .replace(/{{status}}/g, currentStatus)
+          .replace(/{{message}}/g, msg);
+
+        return res.send(renderedHtml);
+      });
     }
 
     // Step 2: Update to Rejected
@@ -888,7 +920,7 @@ router.get("/rejection/:member_id", (req, res) => {
       req.io.emit(`user_confirmation_updated_team_member`);
 
       // Step 3: Load HTML template and respond
-      const filePath = path.join(__dirname, "confirmation_template.html");
+      const filePath = path.join(__dirname, "confirm.html"); // Same template file
       fs.readFile(filePath, "utf8", (readErr, html) => {
         if (readErr) {
           console.error("Error loading HTML file:", readErr);
@@ -904,6 +936,7 @@ router.get("/rejection/:member_id", (req, res) => {
     });
   });
 });
+
 
 
 // New endpoint to get invitation details
