@@ -63,7 +63,6 @@ router.post("/get_all_members_status", (req, res) => {
     return res.status(400).json({ error: "user_email is required" });
   }
 
-  console.log("Request received for get_all_members_status");
 
   const query = `
     SELECT assigned_team_member, event_request_type, package_name, equipment_name
@@ -110,8 +109,7 @@ router.post("/get_all_members_status", (req, res) => {
 router.post("/get_members", (req, res) => {
   const { user_email } = req.body;
   const query = `
-        SELECT owner_email,member_id, member_name, member_profile_img, member_role, member_event_assignment, member_status
-        FROM team_member where owner_email = ?
+        SELECT * FROM team_member where owner_email = ?
     `;
 
   // Execute the query to fetch data from the database
@@ -154,14 +152,6 @@ router.post("/filtered_team_member", (req, res) => {
   const formattedStartDate = new Date(start_date).toISOString().slice(0, 19).replace('T', ' ');
   const formattedEndDate = new Date(end_date).toISOString().slice(0, 19).replace('T', ' ');
 
-  console.log("Filtering team members with params:", {
-    user_email,
-    original_start: start_date,
-    original_end: end_date,
-    formatted_start: formattedStartDate,
-    formatted_end: formattedEndDate
-  });
-
   // First, get all team members for this user
   const teamQuery = `SELECT * FROM team_member WHERE owner_email = ?`;
 
@@ -171,7 +161,6 @@ router.post("/filtered_team_member", (req, res) => {
       return res.status(500).json({ message: "Database error", error: teamErr });
     }
 
-    console.log(`Found ${teamMembers.length} total team members`);
 
     // Get all events that overlap with the requested date range
     const eventsQuery = `
@@ -193,31 +182,15 @@ router.post("/filtered_team_member", (req, res) => {
           return res.status(500).json({ message: "Database error", error: eventsErr });
         }
 
-        console.log(`Found ${events.length} overlapping events`);
-
-        // For debugging, print event details
-        events.forEach((event, index) => {
-          console.log(`Event ${index + 1}:`, {
-            id: event.id,
-            start: event.start_date,
-            end: event.end_date,
-            assigned_team_member: event.assigned_team_member
-          });
-        });
-
         // Collect all assigned member IDs from all events
         const busyMemberIds = new Set();
 
         events.forEach(event => {
           let assignedMembers = event.assigned_team_member;
-
-          console.log(`Processing event ID ${event.id}, assigned_team_member:`, assignedMembers);
-
           // Parse JSON if needed
           if (typeof assignedMembers === 'string') {
             try {
               assignedMembers = JSON.parse(assignedMembers);
-              console.log("Parsed JSON members:", assignedMembers);
             } catch (err) {
               console.error("Error parsing assigned members:", err);
               assignedMembers = [];
@@ -226,18 +199,14 @@ router.post("/filtered_team_member", (req, res) => {
 
           // Handle different formats of assigned members
           if (Array.isArray(assignedMembers)) {
-            console.log(`Processing ${assignedMembers.length} assigned members in array format`);
             assignedMembers.forEach(member => {
-              console.log("Processing member:", member, "Type:", typeof member);
 
               if (typeof member === 'object' && member.member_id) {
-                console.log(`Adding member_id ${member.member_id} from object`);
                 busyMemberIds.add(member.member_id);
               } else if (typeof member === 'string') {
                 // Try to find member ID by name if string
                 const foundMember = teamMembers.find(m => m.member_name === member);
                 if (foundMember) {
-                  console.log(`Adding member_id ${foundMember.member_id} from string name ${member}`);
                   busyMemberIds.add(foundMember.member_id);
                 } else {
                   console.log(`Could not find member by name: ${member}`);
@@ -245,7 +214,6 @@ router.post("/filtered_team_member", (req, res) => {
               } else if (typeof member === 'number' || !isNaN(parseInt(member))) {
                 // Handle case where member ID is directly provided as a number
                 const memberId = parseInt(member);
-                console.log(`Adding direct member_id ${memberId}`);
                 busyMemberIds.add(memberId);
               } else {
                 console.log(`Unhandled member type: ${typeof member}, value:`, member);
@@ -259,7 +227,6 @@ router.post("/filtered_team_member", (req, res) => {
         // Convert to array
         const busyMemberIdsArray = Array.from(busyMemberIds);
 
-        console.log(`Found ${busyMemberIdsArray.length} busy team members:`, busyMemberIdsArray);
 
         return res.status(200).json({
           assignedTeamMembers: busyMemberIdsArray,
@@ -437,7 +404,6 @@ router.post("/team_status", (req, res) => {
     }
 
     const status = results[0];
-    // console.log(status);
     res.json({
       total_members: status.total_members,
       active_members: status.active_members,
@@ -753,9 +719,7 @@ router.get("/confirmation/:member_id", (req, res) => {
         }
       });
 
-      console.log("Starting the io emit")
       req.io.emit(`user_confirmation_updated_team_member`);
-      console.log("ending the io emit")
 
       const filePath = path.join(__dirname, 'confirmation_template.html'); // Match the correct file
       fs.readFile(filePath, 'utf8', (readErr, html) => {
@@ -777,7 +741,6 @@ router.get("/confirmation/:member_id", (req, res) => {
 // reject invitation
 router.get("/rejection/:member_id", (req, res) => {
   const { member_id } = req.params;
-  console.log("member id ", member_id);
 
   if (!member_id) {
     return res.status(400).json({ error: "Member id not available" });
@@ -1027,7 +990,6 @@ router.post("/photographers", (req, res) => {
         console.error("Error searching photographers:", err);
         return res.status(500).json({ error: "Database error", details: err });
       }
-      console.log("results from photographers", results);
 
       const sanitizedResults = results.map(user => ({
         user_id: user.user_id,
