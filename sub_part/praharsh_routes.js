@@ -170,20 +170,27 @@ router.post("/owner_drive/get_folder_preview", (req, res) => {
 router.post("/add-team-members", (req, res) => {
   const { user_email, team_members, event_id } = req.body;
 
+  // Validate input
   if (
     !user_email ||
     !Array.isArray(team_members) ||
-    team_members.length === 0
+    team_members.length === 0 ||
+    !event_id
   ) {
-    return res.status(400).json({ message: "No team members to assign" });
+    return res.status(400).json({ message: "Invalid input data" });
   }
 
-  const assignedMemberNames = team_members.map((member) => member.member_name);
-  // Convert team members array to JSON string
-  const assignedMembersJson = JSON.stringify(assignedMemberNames);
+  // Extract only member IDs
+  const assignedMemberIds = team_members.map((member) => member.member_id);
 
-  // Update event_request table (Assuming latest event for this user)
-  const sql = `UPDATE event_request SET assigned_team_member = ?, event_status= 'Accepted' WHERE receiver_email = ? AND id= ?`;
+  // Convert to JSON string for storage
+  const assignedMembersJson = JSON.stringify(assignedMemberIds);
+
+  const sql = `
+    UPDATE event_request
+    SET assigned_team_member = ?, event_status = 'Accepted'
+    WHERE receiver_email = ? AND id = ?
+  `;
 
   db.query(sql, [assignedMembersJson, user_email, event_id], (err, result) => {
     if (err) {
@@ -198,6 +205,7 @@ router.post("/add-team-members", (req, res) => {
     res.json({ message: "Team members assigned successfully" });
   });
 });
+
 
 router.post("/request-update-status", (req, res) => {
   // const { id } = req.params;
