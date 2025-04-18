@@ -4,6 +4,7 @@ const APP_email_pass_key = "yqhc ntzi ewdb etrn";
 const fs = require('fs').promises; // Promisify fs module for async operations
 const nodemailer = require('nodemailer');
 const { write_log_file, error_message, info_message, success_message, normal_message } = require('./_all_help');
+const path = require('path'); // Add path module import
 
 async function send_email(to, subject, htmlContent) {
     try {
@@ -128,10 +129,55 @@ async function send_team_invitation_email(member_email, member_name, owner_name,
     }
 }
 
+async function send_owner_notification_email(owner_email, owner_name, member_name, status) {
+    console.log("Sending owner notification email:", owner_email, member_name, status);
+
+    try {
+        // Load the owner notification template
+        let template;
+        try {
+            template = await fs.readFile(path.join(__dirname, 'send_owner_mail.html'), 'utf8');
+        } catch (error) {
+            // Fallback inline HTML
+            template = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px;">
+                    <h2>Team Invitation Update</h2>
+                    <p>Hello {{owner_name}},</p>
+                    <p>{{member_name}} has {{status_text}} your invitation to join the team.</p>
+                    <p>Log in to your dashboard to view your current team.</p>
+                    <p style="font-size: 12px; color: #999;">This is an automated notification from TeamConnect.</p>
+                </div>
+            `;
+            console.log("Using fallback email template for owner notification.");
+        }
+
+        // Dynamic status text
+        const statusText = status === "Confirmed" ? "accepted" : "declined";
+
+        // Replace placeholders
+        const htmlContent = template
+            .replace(/{{owner_name}}/g, owner_name)
+            .replace(/{{member_name}}/g, member_name)
+            .replace(/{{status}}/g, status)
+            .replace(/{{status_text}}/g, statusText);
+
+        const subject = `Team invitation ${status.toLowerCase()} by ${member_name}`;
+
+        // Send the email
+        await send_email(owner_email, subject, htmlContent);
+        return true;
+
+    } catch (error) {
+        console.error('Failed to send owner notification email:', error);
+        return false;
+    }
+}
+
 module.exports = {
     send_welcome_page,
     send_otp_page,
     send_forgot_password_email,
     send_event_confirmation_email,
-    send_team_invitation_email
+    send_team_invitation_email,
+    send_owner_notification_email
 };

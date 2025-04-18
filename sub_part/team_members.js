@@ -8,7 +8,7 @@ const path = require('path');
 
 
 require('dotenv').config();
-const { send_team_invitation_email } = require('../modules/send_server_email');
+const { send_team_invitation_email, send_owner_notification_email } = require('../modules/send_server_email');
 
 const db = mysql.createConnection({
   host: process.env.DB_HOST,
@@ -400,181 +400,6 @@ router.post("/get_all_members", (req, res) => {
   });
 });
 
-// 2. Add a pending team member
-// router.post("/add_pending_member", async (req, res) => {
-//   const {
-//     owner_email,
-//     member_name,
-//     member_profile_img,
-//     member_role,
-//     member_email,
-//     member_phone,
-//     invitation_link
-//   } = req.body;
-
-//   // Check if member with this email already exists for this owner
-//   const checkQuery = `
-//     SELECT * FROM team_member
-//     WHERE owner_email = ? AND team_member_email = ?
-//   `;
-
-//   db.query(checkQuery, [owner_email, member_email], (checkErr, checkResults) => {
-//     if (checkErr) {
-//       console.error("Error checking for existing team member:", checkErr);
-//       return res.status(500).json({ error: "Database error", details: checkErr });
-//     }
-
-//     // If member already exists, return error
-//     if (checkResults.length > 0) {
-//       return res.status(400).json({
-//         error: "Team member with this email already exists",
-//         member: checkResults[0]
-//       });
-//     }
-
-//     // Insert the new team member into the database with Pending status
-//     const insertQuery = `
-//       INSERT INTO team_member (
-//         owner_email, 
-//         member_name, 
-//         member_profile_img, 
-//         member_role, 
-//         team_member_email, 
-//         team_member_phone, 
-//         member_status,
-//         invitation_token,
-//         invitation_date
-//       ) 
-//       VALUES (?, ?, ?, ?, ?, ?, 'Pending', ?, NOW())
-//     `;
-
-//     db.query(
-//       insertQuery,
-//       [
-//         owner_email,
-//         member_name,
-//         member_profile_img,
-//         member_role,
-//         member_email,
-//         member_phone,
-//         invitation_link
-//       ],
-//       async (insertErr, result) => {
-//         if (insertErr) {
-//           console.error("Error adding pending team member:", insertErr);
-//           return res.status(500).json({ error: "Database error", details: insertErr });
-//         }
-
-//         // Send invitation email
-//         // await send_team_member_confirmation_email(member_email, member_name, owner_email, owner_email, member_profile_img, business_name, member_role, invitationLink);
-
-//         // Return the newly created pending member with its ID
-//         res.status(201).json({
-//           message: "Pending team member added successfully",
-//           member_id: result.insertId
-//         });
-//       }
-//     );
-//   });
-// });
-
-// // 3. Send invitation to a team member
-// // 3. Send invitation to a team member
-// router.post("/send_invitation", async (req, res) => {
-//   const {
-//     owner_email,
-//     member_email,
-//     member_role,
-//     member_name
-//   } = req.body;
-
-//   try {
-//     // Get owner information for the invitation email
-//     const ownerQuery = `
-//       SELECT user_name, business_name 
-//       FROM owner 
-//       WHERE user_email = ?
-//     `;
-
-//     db.query(ownerQuery, [owner_email], async (err, results) => {
-//       if (err || results.length === 0) {
-//         console.error("Error fetching owner information:", err);
-//         return res.status(500).json({ error: "Could not fetch owner information" });
-//       }
-
-//       const owner = results[0];
-//       const businessName = owner.business_name || "Photography Business";
-//       const ownerName = owner.user_name || "Business Owner";
-
-//       // Generate a unique invitation token
-//       const encrypted__From__Email = encryptEmail(owner_email);
-//       const encrypted__To__Email = encryptEmail(member_email);
-//       const invitationToken = `${require('crypto').randomBytes(32).toString('hex')}__From__${encrypted__From__Email}__To__${encrypted__To__Email}__`;
-
-//       console.log("invitationToken", invitationToken);
-
-//       // Store the invitation token in the database
-//       const tokenQuery = `
-//         UPDATE team_member 
-//         SET invitation_token = ?, invitation_date = NOW() 
-//         WHERE owner_email = ? AND team_member_email = ?
-//       `;
-
-//       db.query(tokenQuery, [invitationToken, owner_email, member_email], async (tokenErr) => {
-//         if (tokenErr) {
-//           console.error("Error storing invitation token:", tokenErr);
-//           return res.status(500).json({ error: "Failed to generate invitation" });
-//         }
-
-//         const getIdQuery = `
-//           SELECT member_id FROM team_member 
-//           WHERE owner_email = ? AND team_member_email = ?
-//         `;
-
-//         db.query(getIdQuery, [owner_email, member_email], async (idErr, idResult) => {
-//           if (idErr || idResult.length === 0) {
-//             console.error("Error fetching member ID:", idErr);
-//             return res.status(500).json({ error: "Failed to fetch member ID" });
-//           }
-
-//           const member_id = idResult[0].member_id;
-//           console.log("member_id is", member_id);
-
-//           const invitationLink = `${process.env.SERVER_URL}/team_members/accept-invitation/${invitationToken}`;
-
-//           // Send invitation email
-//           try {
-//             const emailSent = await send_team_invitation_email(
-//               member_email,
-//               member_name,
-//               ownerName,
-//               businessName,
-//               member_role,
-//               invitationLink,
-//               member_id
-//             );
-
-//             if (emailSent) {
-//               return res.status(200).json({
-//                 message: "Invitation sent successfully",
-//                 invitationLink
-//               });
-//             } else {
-//               return res.status(500).json({ error: "Failed to send invitation email" });
-//             }
-//           } catch (emailErr) {
-//             console.error("Error sending invitation email:", emailErr);
-//             return res.status(500).json({ error: "Failed to send invitation email" });
-//           }
-//         });
-//       });
-//     });
-//   } catch (error) {
-//     console.error("Error in send_invitation:", error);
-//     res.status(500).json({ error: "Server error", details: error.message });
-//   }
-// });
-
 router.post("/invite_member", async (req, res) => {
   const {
     owner_email,
@@ -706,35 +531,6 @@ router.post("/invite_member", async (req, res) => {
   }
 });
 
-// 5. Accept team member invitation - GET endpoint for browser redirects
-// router.get("/accept-invitation/:member_id", (req, res) => {
-//   const { member_id } = req.params;
-
-//   const query = "select * from team_member where member_id = ? "
-//   // const rawtoken = decodeURIComponent(token);
-//   console.log("member id is ", member_id);
-
-//   // 🧾 Read and render the HTML template
-//   const filePath = path.join(__dirname, 'invitation_template.html');
-//   fs.readFile(filePath, 'utf8', (err, html) => {
-//     if (err) {
-//       console.error('Error reading template:', err);
-//       return res.status(500).send('Error loading invitation page');
-//     }
-//     const renderedHtml = html.replace(/{{member_id}}/g, member_id); // example
-
-//     res.send(renderedHtml);
-
-//     // const renderedHtml = html
-//     //   .replace(/{{business_name}}/g, invitationData.business_name)
-//     //   .replace(/{{member_name}}/g, invitationData.member_name)
-//     //   .replace(/{{owner_name}}/g, invitationData.owner_name)
-//     //   .replace(/{{member_role}}/g, invitationData.member_role)
-//     //   .replace(/{{invitation_link}}/g, invitationData.invitation_link);
-
-//     // res.send(renderedHtml);
-//   });
-// });
 
 router.get("/accept-invitation/:member_id", (req, res) => {
   const { member_id } = req.params;
@@ -742,9 +538,21 @@ router.get("/accept-invitation/:member_id", (req, res) => {
   const memberQuery = "SELECT * FROM team_member WHERE member_id = ?";
 
   db.query(memberQuery, [member_id], (memberErr, memberResults) => {
-    if (memberErr || memberResults.length === 0) {
-      console.error("Error fetching team member:", memberErr);
-      return res.status(500).send("Team member not found");
+    if (memberResults.length === 0) {
+      const file_path = "Member_not_found.html"
+      const full_path = path.join(__dirname, file_path);
+      fs.readFile(full_path, 'utf8', (readErr, html) => {
+        if (readErr) {
+          console.error("Error reading confirmation template:", readErr);
+          return res.status(500).send("Error loading confirmation page");
+        }
+
+        const renderedHtml = html
+          .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL)
+
+        return res.send(renderedHtml);
+      });
+      return;
     }
 
     const member = memberResults[0];
@@ -796,7 +604,7 @@ router.get("/confirmation/:member_id", (req, res) => {
     return res.status(400).send("Member ID is required");
   }
 
-  const checkStatusQuery = "SELECT member_status FROM team_member WHERE member_id = ?";
+  const checkStatusQuery = "SELECT member_status, owner_email, member_name, team_member_email FROM team_member WHERE member_id = ?";
   db.query(checkStatusQuery, [member_id], (checkErr, results) => {
     if (checkErr) {
       console.error("Error checking member status:", checkErr);
@@ -820,22 +628,66 @@ router.get("/confirmation/:member_id", (req, res) => {
       return;
     }
 
-    const currentStatus = results[0].member_status;
+    const currentStatus = results[0]?.member_status;
+    const ownerEmail = results[0]?.owner_email;
+    const memberName = results[0]?.member_name;
 
-    if (currentStatus === "Confirmed" || currentStatus === "Rejected") {
-      // Don't allow re-confirmation or change
-      return res.status(403).send("Action not allowed. Member is already " + currentStatus);
+    if (currentStatus === "Confirmed") {
+      const filePath = path.join(__dirname, "already_confirmed_template.html");
+      fs.readFile(filePath, "utf8", (readErr, html) => {
+        if (readErr) {
+          console.error("Error loading HTML file:", readErr);
+          return res.status(500).send("Error loading confirmation page");
+        }
+
+        const renderedHtml = html
+          .replace(/{{status}}/g, currentStatus)
+
+        return res.send(renderedHtml);
+      });
+      return;
+    }
+    if (currentStatus === "Rejected") {
+      const filePath = path.join(__dirname, "already_rejected_template.html");
+      fs.readFile(filePath, "utf8", (readErr, html) => {
+        if (readErr) {
+          console.error("Error loading HTML file:", readErr);
+          return res.status(500).send("Error loading confirmation page");
+        }
+
+        const renderedHtml = html
+          .replace(/{{status}}/g, currentStatus)
+        // .replace(/{{message}}/g, msg);
+
+        return res.send(renderedHtml);
+      });
+      return;
     }
 
     // Step 2: Update to Confirmed
     const updateQuery = "UPDATE team_member SET member_status = ? WHERE member_id = ?";
-    db.query(updateQuery, ["Confirmed", member_id], (updateErr, result) => {
+    db.query(updateQuery, ["Confirmed", member_id], async (updateErr, result) => {
       if (updateErr) {
         console.error("Error updating member status:", updateErr);
         return res.status(500).send("Could not update member to confirmed");
       }
 
+      // Get owner name for email notification
+      const ownerQuery = "SELECT user_name FROM owner WHERE user_email = ?";
+      db.query(ownerQuery, [ownerEmail], async (ownerErr, ownerResults) => {
+        if (!ownerErr && ownerResults.length > 0) {
+          const ownerName = ownerResults[0].user_name;
+
+          // Send email notification to owner
+          await send_owner_notification_email(ownerEmail, ownerName, memberName, "Confirmed");
+        } else {
+          console.error("Error fetching owner details for email:", ownerErr);
+        }
+      });
+
+      console.log("Starting the io emit")
       req.io.emit(`user_confirmation_updated_team_member`);
+      console.log("ending the io emit")
 
       const filePath = path.join(__dirname, 'confirmation_template.html'); // Match the correct file
       fs.readFile(filePath, 'utf8', (readErr, html) => {
@@ -846,14 +698,13 @@ router.get("/confirmation/:member_id", (req, res) => {
 
         const renderedHtml = html
           .replace(/{{status}}/g, "Confirmed")
-          .replace(/{{message}}/g, "You’ve been successfully added to the team! 🎉");
+          .replace(/{{message}}/g, "You've been successfully added to the team! 🎉");
 
         res.send(renderedHtml);
       });
     });
   });
 });
-
 
 // reject invitation
 router.get("/rejection/:member_id", (req, res) => {
@@ -864,8 +715,9 @@ router.get("/rejection/:member_id", (req, res) => {
     return res.status(400).json({ error: "Member id not available" });
   }
 
+
   // Step 1: Check current member_status
-  const checkStatusQuery = "SELECT member_status FROM team_member WHERE member_id = ?";
+  const checkStatusQuery = "SELECT member_status, owner_email, member_name FROM team_member WHERE member_id = ?";
   db.query(checkStatusQuery, [member_id], (checkErr, results) => {
     if (checkErr) {
       console.error("Error checking member status:", checkErr);
@@ -873,14 +725,30 @@ router.get("/rejection/:member_id", (req, res) => {
     }
 
     if (results.length === 0) {
-      return res.status(404).send("Member not found");
+      const file_path = "Member_not_found.html"
+      const full_path = path.join(__dirname, file_path);
+      fs.readFile(full_path, 'utf8', (readErr, html) => {
+        if (readErr) {
+          console.error("Error reading confirmation template:", readErr);
+          return res.status(500).send("Error loading confirmation page");
+        }
+
+        const renderedHtml = html
+          .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL)
+
+        return res.send(renderedHtml);
+      });
+      return;
     }
 
-    const currentStatus = results[0].member_status;
+
+    const currentStatus = results[0]?.member_status;
+    const ownerEmail = results[0]?.owner_email;
+    const memberName = results[0]?.member_name;
 
     // If already confirmed or rejected, show proper UI
-    if (currentStatus === "Confirmed" || currentStatus === "Rejected") {
-      const filePath = path.join(__dirname, "confirmation_template.html"); // Make sure filename is correct
+    if (currentStatus === "Confirmed") {
+      const filePath = path.join(__dirname, "already_confirmed_template.html"); // Make sure filename is correct
 
       return fs.readFile(filePath, "utf8", (readErr, html) => {
         if (readErr) {
@@ -888,14 +756,23 @@ router.get("/rejection/:member_id", (req, res) => {
           return res.status(500).send("Error loading confirmation page");
         }
 
-        const msg =
-          currentStatus === "Confirmed"
-            ? "You’ve already accepted the invitation ✅"
-            : "You’ve already rejected the invitation ❌";
+        const renderedHtml = html
+          .replace(/{{status}}/g, currentStatus)
+
+        return res.send(renderedHtml);
+      });
+    }
+    if (currentStatus === "Rejected") {
+      const filePath = path.join(__dirname, "already_rejected_template.html"); // Make sure filename is correct
+
+      return fs.readFile(filePath, "utf8", (readErr, html) => {
+        if (readErr) {
+          console.error("Error loading HTML file:", readErr);
+          return res.status(500).send("Error loading confirmation page");
+        }
 
         const renderedHtml = html
           .replace(/{{status}}/g, currentStatus)
-          .replace(/{{message}}/g, msg);
 
         return res.send(renderedHtml);
       });
@@ -908,16 +785,29 @@ router.get("/rejection/:member_id", (req, res) => {
       WHERE member_id = ?
     `;
 
-    db.query(updateQuery, [member_id], (updateErr, result) => {
+    db.query(updateQuery, [member_id], async (updateErr, result) => {
       if (updateErr) {
         console.error("Error updating to Rejected:", updateErr);
         return res.status(500).send("Failed to reject invitation");
       }
 
+      // Get owner name for email notification
+      const ownerQuery = "SELECT user_name FROM owner WHERE user_email = ?";
+      db.query(ownerQuery, [ownerEmail], async (ownerErr, ownerResults) => {
+        if (!ownerErr && ownerResults.length > 0) {
+          const ownerName = ownerResults[0].user_name;
+
+          // Send email notification to owner
+          await send_owner_notification_email(ownerEmail, ownerName, memberName, "Rejected");
+        } else {
+          console.error("Error fetching owner details for email:", ownerErr);
+        }
+      });
+
       req.io.emit(`user_confirmation_updated_team_member`);
 
       // Step 3: Load HTML template and respond
-      const filePath = path.join(__dirname, "confirm.html"); // Same template file
+      const filePath = path.join(__dirname, "confirmation_template.html"); // Same template file
       fs.readFile(filePath, "utf8", (readErr, html) => {
         if (readErr) {
           console.error("Error loading HTML file:", readErr);
@@ -926,7 +816,7 @@ router.get("/rejection/:member_id", (req, res) => {
 
         const renderedHtml = html
           .replace(/{{status}}/g, "Rejected")
-          .replace(/{{message}}/g, "You’ve successfully rejected the invitation.");
+          .replace(/{{message}}/g, "You've successfully rejected the invitation.");
 
         res.send(renderedHtml);
       });
@@ -996,56 +886,56 @@ router.post("/invitation-details", (req, res) => {
 
 
 // 6. Accept team member invitation - API endpoint
-router.post("/accept-invitation", (req, res) => {
-  const { token } = req.body;
+// router.post("/accept-invitation", (req, res) => {
+//   const { token } = req.body;
 
-  if (!token) {
-    return res.status(400).json({ error: "Invitation token is required" });
-  }
+//   if (!token) {
+//     return res.status(400).json({ error: "Invitation token is required" });
+//   }
 
-  const query = `
-    SELECT * FROM team_member
-    WHERE invitation_token = ?
-  `;
+//   const query = `
+//     SELECT * FROM team_member
+//     WHERE invitation_token = ?
+//   `;
 
-  db.query(query, [token], (err, results) => {
-    if (err) {
-      console.error("Error checking invitation token:", err);
-      return res.status(500).json({ error: "Database error" });
-    }
+//   db.query(query, [token], (err, results) => {
+//     if (err) {
+//       console.error("Error checking invitation token:", err);
+//       return res.status(500).json({ error: "Database error" });
+//     }
 
-    if (results.length === 0) {
-      return res.status(404).json({ error: "Invalid or expired invitation token" });
-    }
+//     if (results.length === 0) {
+//       return res.status(404).json({ error: "Invalid or expired invitation token" });
+//     }
 
-    const member = results[0];
+//     const member = results[0];
 
-    // Update the member status to Active
-    const updateQuery = `
-      UPDATE team_member
-      SET member_status = 'Active', invitation_token = NULL, confirmation_date = NOW()
-      WHERE member_id = ?
-    `;
+//     // Update the member status to Active
+//     const updateQuery = `
+//       UPDATE team_member
+//       SET member_status = 'Active', invitation_token = NULL, confirmation_date = NOW()
+//       WHERE member_id = ?
+//     `;
 
-    db.query(updateQuery, [member.member_id], (updateErr) => {
-      if (updateErr) {
-        console.error("Error accepting invitation:", updateErr);
-        return res.status(500).json({ error: "Failed to accept invitation" });
-      }
+//     db.query(updateQuery, [member.member_id], (updateErr) => {
+//       if (updateErr) {
+//         console.error("Error accepting invitation:", updateErr);
+//         return res.status(500).json({ error: "Failed to accept invitation" });
+//       }
 
-      // Return success with member details
-      res.json({
-        message: "Invitation accepted successfully",
-        member: {
-          id: member.member_id,
-          name: member.member_name,
-          role: member.member_role,
-          email: member.team_member_email
-        }
-      });
-    });
-  });
-});
+//       // Return success with member details
+//       res.json({
+//         message: "Invitation accepted successfully",
+//         member: {
+//           id: member.member_id,
+//           name: member.member_name,
+//           role: member.member_role,
+//           email: member.team_member_email
+//         }
+//       });
+//     });
+//   });
+// });
 
 router.post("/photographers", (req, res) => {
   const { query, user_email } = req.body;

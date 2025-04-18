@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team Invitation Update</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Roboto", sans-serif;
+        background-color: #f4f6f8;
+        color: #333;
+        padding: 40px 0;
+      }
+      .container {
+        max-width: 700px;
+        margin: auto;
+        background-color: #ffffff;
+        padding: 40px 30px;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+        text-align: center;
+      }
+      .logo {
+        margin-bottom: 30px;
+      }
+      .illustration {
+        margin: 0 auto 30px;
+      }
+      h1 {
+        font-size: 26px;
+        color: #2d3748;
+        margin-bottom: 20px;
+      }
+      p {
+        font-size: 16px;
+        color: #4a5568;
+        margin-bottom: 20px;
+        max-width: 550px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .highlight {
+        font-weight: 500;
+        color: #1a73e8;
+      }
+      footer {
+        margin-top: 40px;
+        font-size: 13px;
+        color: #a0aec0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container" id="email-content">
+      <!-- Content will be injected here -->
+    </div>
+
+    <script>
+      const status = "{{status}}";
+      const memberName = "{{memberName}}";
+      const container = document.getElementById("email-content");
+
+      const logo = `
+        <div class="logo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="140" height="30" viewBox="0 0 140 30">
+            <text x="0" y="20" font-family="Roboto" font-size="20" font-weight="bold">TeamConnect</text>
+          </svg>
+        </div>
+      `;
+
+      if (status === "Confirmed") {
+        container.innerHTML = `
+          ${logo}
+          <div class="illustration">
+            <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="#0f7b3e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M16 12l-4 4-2-2" />
+            </svg>
+          </div>
+          <h1>Team Member Joined Successfully</h1>
+          <p><span class="highlight">${memberName}</span> has confirmed your invitation and is now part of your team on <strong>TeamConnect</strong>.</p>
+          <p>You can now collaborate with them and assign roles or tasks as needed from your team dashboard.</p>
+          <p>Thanks for using TeamConnect to build your dream team!</p>
+          <footer>© ${new Date().getFullYear()} TeamConnect. All rights reserved.</footer>
+        `;
+      } else if (status === "Rejected") {
+        container.innerHTML = `
+          ${logo}
+          <div class="illustration">
+            <svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="#ce3d3d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+          </div>
+          <h1>Invitation Declined</h1>
+          <p><span class="highlight">${memberName}</span> has chosen to decline your team invitation.</p>
+          <p>If you believe this was a mistake or wish to invite someone else, you can resend the invitation or update your team members list.</p>
+          <p>We’re here to help you grow your team with the right people!</p>
+          <footer>© ${new Date().getFullYear()} TeamConnect. All rights reserved.</footer>
+        `;
+      }
+    </script>
+  </body>
+</html>

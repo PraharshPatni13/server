@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Team Invitation Status</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: "Roboto", sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background-color: #f8f9fa;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 40px 20px;
+        text-align: center;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        margin-top: 50px;
+      }
+      .logo {
+        margin-bottom: 30px;
+      }
+      .illustration {
+        width: 200px;
+        height: 200px;
+        margin: 0 auto 30px;
+      }
+      h1 {
+        font-size: 28px;
+        margin-bottom: 15px;
+        color: #2d3748;
+      }
+      .status {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 30px;
+        font-weight: 500;
+        margin-bottom: 20px;
+      }
+      .already-processed {
+        background-color: #fbecec;
+        color: #ce3d3d;
+      }
+      p {
+        margin-bottom: 20px;
+        font-size: 16px;
+        color: #4a5568;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      footer {
+        margin-top: 50px;
+        font-size: 14px;
+        color: #718096;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="logo">
+        <svg xmlns="http://www.w3.org/2000/svg" width="120" height="30" viewBox="0 0 120 30">
+          <text x="0" y="20" font-family="Roboto" font-size="20" font-weight="bold">TeamConnect</text>
+        </svg>
+      </div>
+      <div class="illustration">
+        <svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 24 24" fill="none" stroke="#ce3d3d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="15" y1="9" x2="9" y2="15"></line>
+          <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+      </div>
+      <h1>Already Rejected</h1>
+      <div class="status already-processed">This Invitation Was Already Rejected</div>
+      <p>You have already rejected this invitation. No additional action is required.</p>
+      <p>If you changed your mind or need further help, please reach out to your team administrator.</p>
+      <footer>© ${new Date().getFullYear()} TeamConnect. All rights reserved.</footer>
+    </div>
+  </body>
+</html>
