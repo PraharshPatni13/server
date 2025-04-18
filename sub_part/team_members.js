@@ -56,39 +56,51 @@ function decryptEmail(encryptedEmail) {
 
 
 router.post("/get_all_members_status", (req, res) => {
-  const today = moment().format("YYYY-MM-DD HH:mm:ss"); // Current timestamp
-  const { user_email } = req.body; // Extract user email
+  const today = moment().format("YYYY-MM-DD HH:mm:ss");
+  const { user_email } = req.body;
 
   if (!user_email) {
     return res.status(400).json({ error: "user_email is required" });
   }
 
-  console.log("before query Request received for get_all_members_status");
+  console.log("Request received for get_all_members_status");
+
   const query = `
-      SELECT assigned_team_member, event_request_type, package_name, equipment_name
-      FROM event_request 
-      WHERE ? BETWEEN start_date AND end_date
+    SELECT assigned_team_member, event_request_type, package_name, equipment_name
+    FROM event_request 
+    WHERE ? BETWEEN start_date AND end_date
   `;
 
   db.query(query, [today], (err, results) => {
     if (err) {
+      console.error("Database error:", err);
       return res.status(500).json({ error: "Database error", details: err });
     }
 
     if (results.length === 0) {
-      console.log("No data found for the user.");
-      return res.json({ assigned_team_member: [], event_details: [] }); // No data found
+      console.log("No data found.");
+      return res.json([]); // Return empty array if nothing found
     }
-    console.log("this is for team member assignment ", results);
 
-    const responseData = results.map(row => ({
-      assigned_team_member: row.assigned_team_member
-        ? String(row.assigned_team_member).split(",").map(item => item.trim())
-        : [],
-      event_request_type: row.event_request_type,  // Include event_request_type
-      event_detail: row.event_request_type === "package" ? row.package_name : row.equipment_name
-    }));
-    // console.log("response from the server side ", responseData);
+    const responseData = results.map(row => {
+      let assignedMembers = [];
+
+      try {
+        // Parse JSON from DB safely
+        assignedMembers = JSON.parse(row.assigned_team_member || "[]");
+      } catch (error) {
+        console.warn("Error parsing assigned_team_member JSON:", error);
+      }
+
+      return {
+        assigned_team_member: assignedMembers,
+        event_request_type: row.event_request_type,
+        event_detail:
+          row.event_request_type === "package"
+            ? row.package_name
+            : row.equipment_name,
+      };
+    });
 
     res.json(responseData);
   });
@@ -133,76 +145,132 @@ router.post("/get_inactive_members", (req, res) => {
 router.post("/filtered_team_member", (req, res) => {
   const { user_email, start_date, end_date } = req.body;
 
-  const query = `
-    SELECT assigned_team_member 
-    FROM event_request 
-    WHERE receiver_email = ? 
-    AND (
-      (? BETWEEN start_date AND end_date) OR
-      (? BETWEEN start_date AND end_date) OR
-      (start_date BETWEEN ? AND ?) OR
-      (end_date BETWEEN ? AND ?)
-    );
-  `;
+  // Ensure input is provided
+  if (!user_email || !start_date || !end_date) {
+    return res.status(400).json({ message: "Missing required parameters" });
+  }
 
-  // Execute the query
-  db.query(
-    query,
-    [user_email, start_date, end_date, start_date, end_date, start_date, end_date],
-    (err, results) => {
-      if (err) {
-        console.error("Error fetching team members:", err);
-        return res.status(500).json({ message: "Database error", error: err });
-      }
+  // Format dates properly to ensure consistent comparison
+  const formattedStartDate = new Date(start_date).toISOString().slice(0, 19).replace('T', ' ');
+  const formattedEndDate = new Date(end_date).toISOString().slice(0, 19).replace('T', ' ');
 
-      console.log("Query Params:", user_email, start_date, end_date);
+  console.log("Filtering team members with params:", { 
+    user_email, 
+    original_start: start_date,
+    original_end: end_date,
+    formatted_start: formattedStartDate, 
+    formatted_end: formattedEndDate 
+  });
 
-      const assignedTeamMembers = new Set();
-
-      results.forEach((result) => {
-        let assignedTeamMember = result.assigned_team_member;
-
-        // Handle possible JSON string stored in DB
-        if (typeof assignedTeamMember === "string") {
-          try {
-            assignedTeamMember = JSON.parse(assignedTeamMember);
-          } catch (error) {
-            console.error("Error parsing assigned team members:", error);
-            assignedTeamMember = [];
-          }
-        }
-
-        if (Array.isArray(assignedTeamMember)) {
-          assignedTeamMember.forEach((member) => assignedTeamMembers.add(member));
-        }
-      });
-
-      const busyTeamMembers = [...assignedTeamMembers];
-
-      // Fetch all team members from another table (assuming you have a `team_members` table)
-      const allTeamQuery = `SELECT * FROM team_member`;
-
-      db.query(allTeamQuery, [], (err, teamResults) => {
-        if (err) {
-          console.error("Error fetching all team members:", err);
-          return res.status(500).json({ message: "Database error", error: err });
-        }
-
-        const allTeamMembers = teamResults.map((row) => row.team_member);
-
-        // Find free team members
-        const freeTeamMembers = allTeamMembers.filter(
-          (member) => !busyTeamMembers.includes(member)
-        );
-
-        return res.status(200).json({
-          assignedTeamMembers: busyTeamMembers,
-          freeTeamMembers: freeTeamMembers,
-        });
-      });
+  // First, get all team members for this user
+  const teamQuery = `SELECT * FROM team_member WHERE owner_email = ?`;
+  
+  db.query(teamQuery, [user_email], (teamErr, teamMembers) => {
+    if (teamErr) {
+      console.error("Error fetching team members:", teamErr);
+      return res.status(500).json({ message: "Database error", error: teamErr });
     }
-  );
+    
+    console.log(`Found ${teamMembers.length} total team members`);
+    
+    // Get all events that overlap with the requested date range
+    const eventsQuery = `
+      SELECT * FROM event_request 
+      WHERE receiver_email = ? 
+      AND (
+        (start_date <= ? AND end_date >= ?) OR  /* Event contains the requested period */
+        (start_date >= ? AND start_date <= ?) OR /* Event starts during requested period */
+        (end_date >= ? AND end_date <= ?)      /* Event ends during requested period */
+      )
+    `;
+    
+    db.query(
+      eventsQuery,
+      [user_email, formattedEndDate, formattedStartDate, formattedStartDate, formattedEndDate, formattedStartDate, formattedEndDate],
+      (eventsErr, events) => {
+        if (eventsErr) {
+          console.error("Error fetching events:", eventsErr);
+          return res.status(500).json({ message: "Database error", error: eventsErr });
+        }
+        
+        console.log(`Found ${events.length} overlapping events`);
+        
+        // For debugging, print event details
+        events.forEach((event, index) => {
+          console.log(`Event ${index + 1}:`, {
+            id: event.id,
+            start: event.start_date,
+            end: event.end_date,
+            assigned_team_member: event.assigned_team_member
+          });
+        });
+        
+        // Collect all assigned member IDs from all events
+        const busyMemberIds = new Set();
+        
+        events.forEach(event => {
+          let assignedMembers = event.assigned_team_member;
+          
+          console.log(`Processing event ID ${event.id}, assigned_team_member:`, assignedMembers);
+          
+          // Parse JSON if needed
+          if (typeof assignedMembers === 'string') {
+            try {
+              assignedMembers = JSON.parse(assignedMembers);
+              console.log("Parsed JSON members:", assignedMembers);
+            } catch (err) {
+              console.error("Error parsing assigned members:", err);
+              assignedMembers = [];
+            }
+          }
+          
+          // Handle different formats of assigned members
+          if (Array.isArray(assignedMembers)) {
+            console.log(`Processing ${assignedMembers.length} assigned members in array format`);
+            assignedMembers.forEach(member => {
+              console.log("Processing member:", member, "Type:", typeof member);
+              
+              if (typeof member === 'object' && member.member_id) {
+                console.log(`Adding member_id ${member.member_id} from object`);
+                busyMemberIds.add(member.member_id);
+              } else if (typeof member === 'string') {
+                // Try to find member ID by name if string
+                const foundMember = teamMembers.find(m => m.member_name === member);
+                if (foundMember) {
+                  console.log(`Adding member_id ${foundMember.member_id} from string name ${member}`);
+                  busyMemberIds.add(foundMember.member_id);
+                } else {
+                  console.log(`Could not find member by name: ${member}`);
+                }
+              } else if (typeof member === 'number' || !isNaN(parseInt(member))) {
+                // Handle case where member ID is directly provided as a number
+                const memberId = parseInt(member);
+                console.log(`Adding direct member_id ${memberId}`);
+                busyMemberIds.add(memberId);
+              } else {
+                console.log(`Unhandled member type: ${typeof member}, value:`, member);
+              }
+            });
+          } else {
+            console.log(`Assigned members is not an array: ${typeof assignedMembers}`);
+          }
+        });
+        
+        // Convert to array
+        const busyMemberIdsArray = Array.from(busyMemberIds);
+        
+        console.log(`Found ${busyMemberIdsArray.length} busy team members:`, busyMemberIdsArray);
+        
+        return res.status(200).json({
+          assignedTeamMembers: busyMemberIdsArray,
+          totalEvents: events.length,
+          totalTeamMembers: teamMembers.length
+        });
+      }
+    );
+  });
 });
+
 
 
 router.post("/add_members", (req, res) => {
@@ -846,7 +914,7 @@ router.get("/confirmation/:member_id", (req, res) => {
 
         const renderedHtml = html
           .replace(/{{status}}/g, "Confirmed")
-          .replace(/{{message}}/g, "You’ve been successfully added to the team! 🎉");
+          .replace(/{{message}}/g, "You've been successfully added to the team! 🎉");
 
         res.send(renderedHtml);
       });
@@ -890,8 +958,8 @@ router.get("/rejection/:member_id", (req, res) => {
 
         const msg =
           currentStatus === "Confirmed"
-            ? "You’ve already accepted the invitation ✅"
-            : "You’ve already rejected the invitation ❌";
+            ? "You've already accepted the invitation ✅"
+            : "You've already rejected the invitation ❌";
 
         const renderedHtml = html
           .replace(/{{status}}/g, currentStatus)
@@ -926,7 +994,7 @@ router.get("/rejection/:member_id", (req, res) => {
 
         const renderedHtml = html
           .replace(/{{status}}/g, "Rejected")
-          .replace(/{{message}}/g, "You’ve successfully rejected the invitation.");
+          .replace(/{{message}}/g, "You've successfully rejected the invitation.");
 
         res.send(renderedHtml);
       });
