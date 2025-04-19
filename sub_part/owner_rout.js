@@ -204,37 +204,37 @@ router.post("/verify_otp_owner", async (req, res) => {
 
           try {
             const baseDir = path.join(__dirname, "..", "root");
-          
+
             // Step 1: Create 'root' folder if not exists
             if (!fs.existsSync(baseDir)) {
               fs.mkdirSync(baseDir);
               console.log("Created root folder");
             }
-          
+
             // Step 2: Create user folder
             const userDir = path.join(baseDir, user_email);
             if (!fs.existsSync(userDir)) {
               fs.mkdirSync(userDir);
               console.log("Created user folder:", user_email);
             }
-          
+
             // Step 3: Create 'drive' folder inside user
             const driveDir = path.join(userDir, "drive");
             const portfolioFoldersDir = path.join(driveDir, "portfolio", "folders");
             fs.mkdirSync(portfolioFoldersDir, { recursive: true });
-          
+
             console.log("Created 'drive/portfolio/folders' structure");
-          
+
             // ✅ Note: No user_profile or business_profile folders now
             // Those will be uploaded later as files:
             //   path.join(userDir, "user_profile.jpg") or ".png"
             //   path.join(userDir, "business_profile.jpg") or ".png"
-          
+
           } catch (folderErr) {
             console.error("Failed to create folders:", folderErr);
             return res.status(500).json({ error: "Failed to create user folders" });
           }
-          
+
 
           // end of the create folder structure code 
 
@@ -1033,7 +1033,7 @@ router.get("/portfolio/photos/:folder_id", (req, res) => {
 
 router.post("/update-user-profile-image", (req, res) => {
   const user_email = req.headers['x-user-email'];
-  
+
   if (!user_email) {
     return res.status(400).send("Missing user email header.");
   }
@@ -1042,55 +1042,55 @@ router.post("/update-user-profile-image", (req, res) => {
     // Create user directory if it doesn't exist
     const baseDir = path.join(__dirname, "..", "root");
     const userDir = path.join(baseDir, user_email);
-    
+
     if (!fs.existsSync(baseDir)) {
       fs.mkdirSync(baseDir);
     }
-    
+
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir);
     }
-    
+
     // Generate filename with timestamp to avoid conflicts
     const fileExt = req.headers['content-type']?.split('/')[1] || 'jpeg';
     const filename = `user_profile.${fileExt}`;
     const filepath = path.join(userDir, filename);
     const fileUrlPath = `/root/${user_email}/${filename}`;
-    
+
     // Create write stream
     const writeStream = fs.createWriteStream(filepath);
-    
+
     // Pipe request body directly to file
     req.pipe(writeStream);
-    
+
     // Handle completion and errors
     writeStream.on('finish', () => {
       // Update database with file path instead of base64
       const query = `UPDATE owner SET user_profile_image_base64 = ? WHERE user_email = ?`;
       const values = [fileUrlPath, user_email];
-      
+
       db.query(query, values, (err, result) => {
         if (err) {
           console.error('Database error:', err);
           return res.status(500).send("Database error.");
         }
-        
+
         if (result.affectedRows === 0) {
           return res.status(404).send("Owner not found.");
         }
-        
-        res.json({ 
+
+        res.json({
           message: "User profile image updated successfully.",
           imagePath: fileUrlPath
         });
       });
     });
-    
+
     writeStream.on('error', (err) => {
       console.error('Error writing file:', err);
       res.status(500).send("Error saving image.");
     });
-    
+
   } catch (error) {
     console.error('Server error:', error);
     res.status(500).send("Server error.");
@@ -1101,29 +1101,29 @@ router.post("/update-user-profile-image", (req, res) => {
 router.get('/profile-image/:user_email', (req, res) => {
   const { user_email } = req.params;
   const query = `SELECT user_profile_image_base64 FROM owner WHERE user_email = ?`;
-  
+
   db.query(query, [user_email], (err, results) => {
     if (err) {
       console.error("Error fetching profile image path:", err);
       return res.status(500).json({ error: "Database error" });
     }
-    
+
     if (results.length === 0 || !results[0].user_profile_image_base64) {
       return res.status(404).send("Image not found");
     }
-    
+
     const imagePath = results[0].user_profile_image_base64;
-    
+
     // If it's a URL path (new format)
     if (imagePath.startsWith('/root/')) {
       const fullPath = path.join(__dirname, '..', imagePath);
-      
+
       if (!fs.existsSync(fullPath)) {
         return res.status(404).send("Image file not found");
       }
-      
+
       res.sendFile(fullPath);
-    } 
+    }
     // If it's base64 (old format)
     else if (imagePath.startsWith('data:image')) {
       const contentType = imagePath.split(';')[0].split(':')[1];
@@ -1195,26 +1195,26 @@ router.post("/remove-profile-image-type", (req, res) => {
         try {
           const fs = require('fs');
           const path = require('path');
-          
+
           // Try different possible paths for the physical file
           const serverRootDir = path.join(__dirname, '..');
           let filePath = path.join(serverRootDir, imagePath);
-          
+
           console.log(`Checking for file at: ${filePath}`);
           let fileExists = fs.existsSync(filePath);
-          
+
           // If not found, try alternative path
           if (!fileExists) {
             // Handle relative path format (/root/user@email/...)
             const altPath = path.join(path.dirname(serverRootDir), "root", imagePath.replace('/root/', ''));
             console.log(`Checking alternative path: ${altPath}`);
-            
+
             if (fs.existsSync(altPath)) {
               filePath = altPath;
               fileExists = true;
             }
           }
-          
+
           // If file exists, delete it
           if (fileExists) {
             fs.unlinkSync(filePath);
@@ -1276,7 +1276,7 @@ router.get("/fetch-profile-image", (req, res) => {
 
 router.post("/update-business-profile-image", (req, res) => {
   const user_email = req.headers['x-user-email'];
-  
+
   if (!user_email) {
     return res.status(400).send("Missing user email header.");
   }
@@ -1285,55 +1285,55 @@ router.post("/update-business-profile-image", (req, res) => {
     // Create user directory if it doesn't exist
     const baseDir = path.join(__dirname, "..", "root");
     const userDir = path.join(baseDir, user_email);
-    
+
     if (!fs.existsSync(baseDir)) {
       fs.mkdirSync(baseDir);
     }
-    
+
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir);
     }
-    
+
     // Generate filename with timestamp to avoid conflicts
     const fileExt = req.headers['content-type']?.split('/')[1] || 'jpeg';
     const filename = `business_profile.${fileExt}`;
     const filepath = path.join(userDir, filename);
     const fileUrlPath = `/root/${user_email}/${filename}`;
-    
+
     // Create write stream
     const writeStream = fs.createWriteStream(filepath);
-    
+
     // Pipe request body directly to file
     req.pipe(writeStream);
-    
+
     // Handle completion and errors
     writeStream.on('finish', () => {
       // Update database with file path instead of base64
       const query = `UPDATE owner SET business_profile_base64 = ? WHERE user_email = ?`;
       const values = [fileUrlPath, user_email];
-      
+
       db.query(query, values, (err, result) => {
         if (err) {
           console.error('Database error:', err);
           return res.status(500).send("Database error.");
         }
-        
+
         if (result.affectedRows === 0) {
           return res.status(404).send("Owner not found.");
         }
-        
-        res.json({ 
+
+        res.json({
           message: "Business profile image updated successfully.",
           imagePath: fileUrlPath
         });
       });
     });
-    
+
     writeStream.on('error', (err) => {
       console.error('Error writing file:', err);
       res.status(500).send("Error saving image.");
     });
-    
+
   } catch (error) {
     console.error('Server error:', error);
     res.status(500).send("Server error.");
@@ -1343,11 +1343,11 @@ router.post("/update-business-profile-image", (req, res) => {
 // Serve business profile image by email
 router.get("/business-profile-image/:user_email", (req, res) => {
   const user_email = req.params.user_email;
-  
+
   if (!user_email) {
     return res.status(400).send("Missing user email");
   }
-  
+
   // Get the profile image path from the database
   db.query(
     "SELECT business_profile_base64 FROM owner WHERE user_email = ?",
@@ -1357,63 +1357,63 @@ router.get("/business-profile-image/:user_email", (req, res) => {
         console.error("Database error:", err);
         return res.status(500).send("Database error");
       }
-      
+
       if (results.length === 0) {
         return res.status(404).send("User not found");
       }
-      
+
       const imagePath = results[0].business_profile_base64;
-      
+
       if (!imagePath) {
         return res.status(404).send("No business profile image found");
       }
-      
+
       // Determine the content type based on the image format
       let contentType = "image/jpeg"; // Default
-      
+
       if (imagePath.endsWith(".png")) {
         contentType = "image/png";
       } else if (imagePath.endsWith(".gif")) {
         contentType = "image/gif";
       }
-      
+
       // If it's a file path (new format)
       if (imagePath.startsWith('/root/')) {
         // Use the same path resolution logic as other endpoints
         const serverRootDir = path.join(__dirname, '..');
         const relativePath = imagePath;
         const fullPath = path.join(serverRootDir, relativePath);
-        
+
         if (fs.existsSync(fullPath)) {
           res.setHeader('Content-Type', contentType);
           return res.sendFile(fullPath);
         }
-        
+
         // Try alternative path as fallback
         const altPath = path.resolve(serverRootDir, `.${relativePath}`);
-        
+
         if (fs.existsSync(altPath)) {
           res.setHeader('Content-Type', contentType);
           return res.sendFile(altPath);
         }
-        
+
         console.error(`Business profile image not found at path: ${fullPath} or ${altPath}`);
         return res.status(404).send(`Image file not found on server`);
-      } 
+      }
       // If it's base64 (old format)
       else if (imagePath.startsWith('data:')) {
         try {
           // Extract content type and base64 data
           const matches = imagePath.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-          
+
           if (!matches || matches.length !== 3) {
             console.error(`Invalid image data format: ${imagePath.substring(0, 30)}...`);
             return res.status(400).send("Invalid image data format");
           }
-          
+
           const base64Data = matches[2];
           const buffer = Buffer.from(base64Data, 'base64');
-          
+
           res.setHeader('Content-Type', matches[1]);
           return res.send(buffer);
         } catch (error) {
@@ -1440,12 +1440,12 @@ router.post("/owner-folders/create", (req, res) => {
 
   // Create directory structure for the user if it doesn't exist
   const userFolderPath = path.join(rootDirectory, user_email, 'drive', 'portfolio', 'folders', folder_name);
-  
+
   // Create the full directory path if it doesn't exist
   fs.mkdirSync(userFolderPath, { recursive: true });
-  
+
   let thumbnailPath = null;
-  
+
   // Process and save the cover image if provided
   if (cover_page_base64 && cover_page_base64.startsWith('data:image')) {
     try {
@@ -1454,14 +1454,14 @@ router.post("/owner-folders/create", (req, res) => {
       const extension = contentType.split('/')[1];
       const base64Data = cover_page_base64.split(',')[1];
       const buffer = Buffer.from(base64Data, 'base64');
-      
+
       // Create filename for the thumbnail
       const thumbnailFilename = 'thumbnail.' + extension;
       const fullThumbnailPath = path.join(userFolderPath, thumbnailFilename);
-      
+
       // Write the file
       fs.writeFileSync(fullThumbnailPath, buffer);
-      
+
       // Store the relative path to be saved in the database
       thumbnailPath = `${user_email}/drive/portfolio/folders/${folder_name}/${thumbnailFilename}`;
     } catch (error) {
@@ -1592,38 +1592,38 @@ router.delete("/owner-folders/:folder_id", (req, res) => {
   db.query(queryFind, [folder_id, user_email], (err, results) => {
     if (err) {
       console.log("Database query failed:", err);
-      return res.status(500).json({ 
-        success: false, 
-        message: "Database error while finding folder" 
+      return res.status(500).json({
+        success: false,
+        message: "Database error while finding folder"
       });
     }
 
     if (results.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Folder not found or unauthorized" 
+      return res.status(404).json({
+        success: false,
+        message: "Folder not found or unauthorized"
       });
     }
 
     const folderName = results[0].folder_name;
     const coverPath = results[0].cover_page_base64;
-    
+
     console.log(`Found folder to delete: "${folderName}"`);
-    
+
     // Check if we have a physical folder to delete
     let physicalFolderDeleted = false;
-    
+
     try {
       // Build physical folder path similar to how photo deletion works
       const folderPath = path.join(__dirname, '..', 'root', user_email, 'drive', 'portfolio', 'folders', folderName);
       console.log(`Physical folder path: ${folderPath}`);
-      
+
       if (fs.existsSync(folderPath)) {
         console.log(`Folder exists at ${folderPath}, attempting deletion`);
-        
+
         // Use rimraf (like fs.rm) to recursively delete the folder and contents
         const { execSync } = require('child_process');
-        
+
         try {
           if (process.platform === 'win32') {
             console.log('Using Windows rmdir command');
@@ -1632,12 +1632,12 @@ router.delete("/owner-folders/:folder_id", (req, res) => {
             console.log('Using Unix rm command');
             execSync(`rm -rf "${folderPath}"`);
           }
-          
+
           physicalFolderDeleted = !fs.existsSync(folderPath);
           console.log(`Folder deletion ${physicalFolderDeleted ? 'successful' : 'failed'}`);
         } catch (deleteErr) {
           console.log(`Command-line deletion error: ${deleteErr.message}`);
-          
+
           // Try manual deletion as fallback
           try {
             deleteFolderContents(folderPath);
@@ -1652,7 +1652,7 @@ router.delete("/owner-folders/:folder_id", (req, res) => {
     } catch (fileErr) {
       console.log(`Error handling physical folder: ${fileErr.message}`);
     }
-    
+
     // Always proceed with database deletion
     deleteFolderFromDB(folder_id, user_email, physicalFolderDeleted, res);
   });
@@ -1681,16 +1681,16 @@ function deleteFolderContents(folderPath) {
 // Helper function to delete folder from database
 function deleteFolderFromDB(folder_id, user_email, physicalFolderDeleted, res) {
   const query = "DELETE FROM owner_folders WHERE folder_id = ? AND user_email = ?";
-  
+
   db.query(query, [folder_id, user_email], (err, result) => {
     if (err) {
       console.log("Database deletion error:", err);
-      return res.status(500).json({ 
-        success: false, 
-        message: "Failed to delete folder from database" 
+      return res.status(500).json({
+        success: false,
+        message: "Failed to delete folder from database"
       });
     }
-    
+
     console.log(`Successfully deleted folder ID ${folder_id} from database`);
     res.json({
       success: true,
@@ -1769,20 +1769,20 @@ router.post("/owner-folders-files/delete", (req, res) => {
             // Try the primary path first
             let filePath = path.join(serverRootDir, file.file_data);
             console.log(`Checking file at: ${filePath}`);
-            
+
             let fileExists = fs.existsSync(filePath);
-            
+
             // If not found, try alternative path
             if (!fileExists) {
               const altPath = path.join(path.dirname(serverRootDir), "root", file.file_data.replace('/root/', ''));
               console.log(`Checking alternative path: ${altPath}`);
-              
+
               if (fs.existsSync(altPath)) {
                 filePath = altPath;
                 fileExists = true;
               }
             }
-            
+
             if (fileExists) {
               fs.unlinkSync(filePath);
               console.log(`Deleted physical file: ${filePath}`);
@@ -1830,7 +1830,7 @@ router.post("/owner-folders-files/delete", (req, res) => {
         }
 
         console.log(`Deleted ${result.affectedRows} records from database`);
-        
+
         if (result.affectedRows > 0) {
           res.status(200).json({
             message: "Files deleted successfully",
@@ -2126,6 +2126,7 @@ router.post("/add-equipment-request", (req, res) => {
 
 // Add service request
 router.post("/add-service-request", (req, res) => {
+  console.log("service request at server side", req.body.receiver_email);
   const {
     event_name,
     sender_email,
@@ -2170,29 +2171,29 @@ router.post("/add-service-request", (req, res) => {
   const calculatedDaysRequired = calculateDays(start_date, end_date);
 
   const query = `
-    INSERT INTO event_request (
-      event_request_type, 
-      event_name,
-      service_name, 
-      service_price_per_day, 
-      service_description, 
-      sender_email, 
-      receiver_email, 
-      total_amount,
-      requirements,
-      services_id,
-      start_date,
-      end_date,
-      event_status,
-      location,
-      days_required,
-      time_stamp
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, Now())
-  `;
+  INSERT INTO event_request (
+    event_request_type, 
+    event_name,
+    service_name, 
+    service_price_per_day, 
+    service_description, 
+    sender_email, 
+    receiver_email, 
+    total_amount,
+    requirements,
+    services_id,
+    start_date,
+    end_date,
+    event_status,
+    location,
+    days_required,
+    time_stamp
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, Now())
+`;
 
   const values = [
-    "service",
+    'service',
     event_name,
     service_name,
     service_price,
@@ -2204,7 +2205,7 @@ router.post("/add-service-request", (req, res) => {
     service_id,
     formattedStartDate,
     formattedEndDate,
-    "Pending",
+    'Pending',
     location,
     days_required
   ];
@@ -2684,11 +2685,11 @@ router.post("/api/upload-photo", (req, res) => {
   const user_email = req.headers['x-user-email'];
   const fileName = req.headers['x-file-name'];
   const fileType = req.headers['content-type'] || 'image/jpeg';
-  
+
   if (!user_email || !fileName) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "Missing required headers (x-user-email, x-file-name)" 
+    return res.status(400).json({
+      success: false,
+      message: "Missing required headers (x-user-email, x-file-name)"
     });
   }
 
@@ -2699,40 +2700,40 @@ router.post("/api/upload-photo", (req, res) => {
     const userDir = path.join(baseDir, user_email);
     const driveDir = path.join(userDir, 'drive');
     const portfolioDir = path.join(driveDir, 'portfolio');
-    
-    
+
+
     // Create directory structure if it doesn't exist
     if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir);
     if (!fs.existsSync(userDir)) fs.mkdirSync(userDir);
     if (!fs.existsSync(driveDir)) fs.mkdirSync(driveDir);
     if (!fs.existsSync(portfolioDir)) fs.mkdirSync(portfolioDir);
-    
+
     // Generate unique filename to avoid conflicts
     const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const safeFileName = uniquePrefix + '-' + fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
     const filePath = path.join(portfolioDir, safeFileName);
-    
+
     // Construct the relative path as stored in the database
     const fileUrlPath = `/root/${user_email}/drive/portfolio/${safeFileName}`;
-    
+
     // Create a write stream and pipe the request to it
     const writeStream = fs.createWriteStream(filePath);
     req.pipe(writeStream);
-    
+
     writeStream.on('finish', () => {
       // Insert record in database with file path, not the actual image data
       const query = "INSERT INTO photo_files (photo_name, photo_type, photo, user_email) VALUES (?, ?, ?, ?)";
-      
+
       db.execute(query, [fileName, fileType, fileUrlPath, user_email], (err, result) => {
         if (err) {
           console.error("Error inserting photo into the database:", err);
-          return res.status(500).json({ 
-            success: false, 
-            message: "Failed to save the photo" 
+          return res.status(500).json({
+            success: false,
+            message: "Failed to save the photo"
           });
         }
 
-        
+
         // Return success with the ID and path
         res.json({
           success: true,
@@ -2742,20 +2743,20 @@ router.post("/api/upload-photo", (req, res) => {
         });
       });
     });
-    
+
     writeStream.on('error', (err) => {
       console.error(`Error writing file to ${filePath}:`, err);
-      res.status(500).json({ 
-        success: false, 
-        message: "Error writing file" 
+      res.status(500).json({
+        success: false,
+        message: "Error writing file"
       });
     });
-    
+
   } catch (error) {
     console.error("Server error:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error" 
+    res.status(500).json({
+      success: false,
+      message: "Server error"
     });
   }
 });
@@ -2771,66 +2772,66 @@ router.post("/api/upload-photo", (req, res) => {
 // Ensure portfolio image serving endpoint uses owner/ prefix
 router.get("/portfolio-image/:photo_id", (req, res) => {
   const { photo_id } = req.params;
-  
+
   if (!photo_id) {
     return res.status(400).json({ error: "Photo ID is required" });
   }
-  
+
   const query = "SELECT photo, photo_type FROM photo_files WHERE photo_id = ?";
-  
+
   db.query(query, [photo_id], (err, results) => {
     if (err) {
       console.error("Database error:", err);
       return res.status(500).json({ error: "Database error" });
     }
-    
+
     if (results.length === 0 || !results[0].photo) {
       console.error(`Image not found for ID: ${photo_id}`);
       return res.status(404).send("Image not found");
     }
-    
+
     const imagePath = results[0].photo;
     const contentType = results[0].photo_type || 'image/jpeg';
-    
+
     // If it's a file path (new format)
     if (imagePath.startsWith('/root/')) {
       // Use the same path resolution logic as the delete endpoint
       const serverRootDir = path.join(__dirname, '..');
       const relativePath = imagePath;
       const fullPath = path.join(serverRootDir, relativePath);
-      
-      
+
+
       if (fs.existsSync(fullPath)) {
         res.setHeader('Content-Type', contentType);
         return res.sendFile(fullPath);
       }
-      
+
       // Try alternative path as fallback
       const altPath = path.resolve(serverRootDir, `.${relativePath}`);
-      
+
       if (fs.existsSync(altPath)) {
-  
+
         res.setHeader('Content-Type', contentType);
         return res.sendFile(altPath);
       }
-      
+
       console.error(`File not found at path: ${fullPath} or ${altPath}`);
       return res.status(404).send(`Image file not found on server`);
-    } 
+    }
     // If it's base64 (old format)
     else if (imagePath.startsWith('data:')) {
       try {
         // Extract content type and base64 data
         const matches = imagePath.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        
+
         if (!matches || matches.length !== 3) {
           console.error(`Invalid image data format: ${imagePath.substring(0, 30)}...`);
           return res.status(400).send("Invalid image data format");
         }
-        
+
         const base64Data = matches[2];
         const buffer = Buffer.from(base64Data, 'base64');
-        
+
         res.setHeader('Content-Type', matches[1]);
         return res.send(buffer);
       } catch (error) {
@@ -2859,25 +2860,25 @@ router.get("/portfolio-image/:photo_id", (req, res) => {
 // Add endpoint to get all portfolio images for a user
 router.post("/owner_drive/get_portfolio", (req, res) => {
   const { email } = req.body;
-  
+
   if (!email) {
-    return res.status(400).json({ 
-      success: false, 
-      message: "User email is required" 
+    return res.status(400).json({
+      success: false,
+      message: "User email is required"
     });
   }
-  
+
   const query = "SELECT photo_id, photo_name, photo_type, photo FROM photo_files WHERE user_email = ?";
-  
+
   db.query(query, [email], (err, results) => {
     if (err) {
       console.error("Error fetching portfolio:", err);
-      return res.status(500).json({ 
-        success: false, 
-        message: "Failed to fetch portfolio images" 
+      return res.status(500).json({
+        success: false,
+        message: "Failed to fetch portfolio images"
       });
     }
-    
+
     // Return the files with the id and path for the client to construct URLs
     const files = results.map(file => {
       return {
@@ -2887,7 +2888,7 @@ router.post("/owner_drive/get_portfolio", (req, res) => {
         photo: file.photo // Return the raw path/data, client will construct proper URL
       };
     });
-    
+
     res.json({
       success: true,
       files: files
@@ -2898,57 +2899,57 @@ router.post("/owner_drive/get_portfolio", (req, res) => {
 // Add endpoint to delete a portfolio image
 router.post("/owner_drive/delete-photo", (req, res) => {
   const { user_email, photo_id } = req.body;
-  
+
   console.log(`Delete request - User: ${user_email}, Photo ID: ${photo_id}`);
-  
+
   if (!user_email || !photo_id) {
-    return res.status(400).json({ 
-      success: false, 
-      error: "User email and photo ID are required" 
+    return res.status(400).json({
+      success: false,
+      error: "User email and photo ID are required"
     });
   }
-  
+
   // First, get the photo path to delete the actual file
   const getPhotoQuery = "SELECT photo, photo_name FROM photo_files WHERE photo_id = ? AND user_email = ?";
-  
+
   db.query(getPhotoQuery, [photo_id, user_email], (err, results) => {
     if (err) {
       console.error("Error fetching photo path:", err);
       return res.status(500).json({ success: false, error: "Database error" });
     }
-    
+
     if (results.length === 0) {
       console.error(`Photo not found - ID: ${photo_id}, User: ${user_email}`);
       return res.status(404).json({ success: false, error: "Photo not found" });
     }
-    
+
     const photoPath = results[0].photo;
     const photoName = results[0].photo_name;
     console.log(`Found photo to delete in DB: ${photoPath}, Name: ${photoName}`);
-    
+
     // Delete from database first
     const deleteQuery = "DELETE FROM photo_files WHERE photo_id = ? AND user_email = ?";
-    
+
     db.query(deleteQuery, [photo_id, user_email], (deleteErr, deleteResult) => {
       if (deleteErr) {
         console.error("Error deleting photo from database:", deleteErr);
         return res.status(500).json({ success: false, error: "Database error" });
       }
-      
+
       console.log(`Successfully deleted from database`);
-      
+
       // After database delete is successful, try to delete the physical file
       let fileDeleted = false;
-      
+
       try {
         // Get the exact filename from the path
         const filename = photoPath.split('/').pop();
         console.log(`Filename to delete: ${filename}`);
-        
+
         // Direct server path from logs
         const directPath = `C:\\Users\\DELL\\Desktop\\server\\root\\${user_email}\\drive\\portfolio\\${filename}`;
         console.log(`Trying to delete file at: ${directPath}`);
-        
+
         if (fs.existsSync(directPath)) {
           fs.unlinkSync(directPath);
           console.log(`Successfully deleted file: ${directPath}`);
@@ -2957,21 +2958,21 @@ router.post("/owner_drive/delete-photo", (req, res) => {
           // Try the portfolio directory scan approach
           const portfolioDir = `C:\\Users\\DELL\\Desktop\\server\\root\\${user_email}\\drive\\portfolio`;
           console.log(`Checking portfolio directory: ${portfolioDir}`);
-          
+
           if (fs.existsSync(portfolioDir)) {
             const files = fs.readdirSync(portfolioDir);
-            
+
             if (files.length > 0) {
               // Extract original filename part
               const parts = filename.split('-');
               if (parts.length >= 3) {
                 const originalName = parts.slice(2).join('-');
                 console.log(`Looking for files containing: ${originalName}`);
-                
+
                 // Find matching files
                 const matchingFiles = files.filter(f => f.includes(originalName));
                 console.log(`Found ${matchingFiles.length} matching files`);
-                
+
                 // Delete matching files
                 for (const matchFile of matchingFiles) {
                   const fullPath = path.join(portfolioDir, matchFile);
@@ -2990,11 +2991,11 @@ router.post("/owner_drive/delete-photo", (req, res) => {
       } catch (fileErr) {
         console.error(`Error deleting file: ${fileErr.message}`);
       }
-      
+
       // Always return success since we deleted the database entry
       return res.status(200).json({
         success: true,
-        message: "Photo deleted successfully", 
+        message: "Photo deleted successfully",
         fileDeleted: fileDeleted
       });
     });
@@ -3003,7 +3004,7 @@ router.post("/owner_drive/delete-photo", (req, res) => {
 
 router.delete("/api/delete-photo", (req, res) => {
   const user_email = req.headers['x-user-email'];
-  const fileName = req.headers['x-file-name']; 
+  const fileName = req.headers['x-file-name'];
   const photoId = req.headers['x-photo-id'];
 
   if (!user_email || (!fileName && !photoId)) {
@@ -3016,11 +3017,11 @@ router.delete("/api/delete-photo", (req, res) => {
   // If we have a filename, try to delete the file directly
   if (fileName) {
     const filePath = path.join(__dirname, '..', 'root', user_email, 'drive', 'portfolio', fileName);
-    
+
     fs.unlink(filePath, (err) => {
       if (err) {
         console.error("File deletion failed:", err);
-        
+
         // If file deletion failed and we have a photo ID, try to delete by ID
         if (photoId) {
           deleteByPhotoId(user_email, photoId, res);
@@ -3043,7 +3044,7 @@ router.delete("/api/delete-photo", (req, res) => {
 function deleteByPhotoId(user_email, photoId, res) {
   // First get the filename from database
   const queryFind = "SELECT photo FROM photo_files WHERE photo_id = ? AND user_email = ?";
-  
+
   db.execute(queryFind, [photoId, user_email], (err, results) => {
     if (err) {
       console.error("Database query failed:", err);
@@ -3052,25 +3053,25 @@ function deleteByPhotoId(user_email, photoId, res) {
         message: "Database error while finding photo"
       });
     }
-    
+
     if (results.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Photo not found in database"
       });
     }
-    
+
     const photoPath = results[0].photo;
     let fileName = null;
-    
+
     // Try to extract filename to delete the file
     if (photoPath && photoPath.includes('/')) {
       const pathParts = photoPath.split('/');
       fileName = pathParts[pathParts.length - 1];
-      
+
       // Try to delete the actual file
       const filePath = path.join(__dirname, '..', 'root', user_email, 'drive', 'portfolio', fileName);
-      
+
       fs.unlink(filePath, (err) => {
         if (err) {
           console.error("File deletion failed (by ID):", err);
@@ -3078,7 +3079,7 @@ function deleteByPhotoId(user_email, photoId, res) {
         } else {
           console.log("File deleted from disk (by ID):", filePath);
         }
-        
+
         // Delete from database
         deleteFromDatabase(user_email, null, photoId, res);
       });
@@ -3093,7 +3094,7 @@ function deleteByPhotoId(user_email, photoId, res) {
 function deleteFromDatabase(user_email, fileName, photoId, res) {
   let query;
   let params;
-  
+
   if (fileName) {
     const fileUrlPath = `/root/${user_email}/drive/portfolio/${fileName}`;
     query = "DELETE FROM photo_files WHERE photo = ? AND user_email = ?";
@@ -3157,7 +3158,7 @@ router.get("/portfolio-image-info/:id", (req, res) => {
 
     const photoPath = results[0].photo;
     const photoName = results[0].photo_name;
-    
+
     // Extract the filename from the path
     let fileName = "";
     if (photoPath && photoPath.includes('/')) {
@@ -3192,7 +3193,7 @@ router.delete("/api/delete-photo-by-id/:id", (req, res) => {
 
   // First get the complete file info from database
   const queryFind = "SELECT photo, photo_name FROM photo_files WHERE photo_id = ? AND user_email = ?";
-  
+
   db.execute(queryFind, [photoId, user_email], (err, results) => {
     if (err) {
       console.error("Database query failed:", err);
@@ -3201,26 +3202,26 @@ router.delete("/api/delete-photo-by-id/:id", (req, res) => {
         message: "Database error while finding photo"
       });
     }
-    
+
     if (results.length === 0) {
       return res.status(404).json({
         success: false,
         message: "Photo not found in database"
       });
     }
-    
+
     const photoPath = results[0].photo;
     let filePath = null;
-    
+
     // Try to extract filename and create full filesystem path
     if (photoPath && photoPath.startsWith('/root/')) {
       // Example: /root/user@example.com/drive/portfolio/filename.jpg
       // We need to extract the relative path after /root/ and join with __dirname/..
       const relativePath = photoPath.substring(6); // Remove '/root/' prefix
       filePath = path.join(__dirname, '..', 'root', relativePath);
-      
+
       console.log(`Attempting to delete file: ${filePath}`);
-      
+
       // Try to delete the file, but continue with DB deletion regardless
       fs.unlink(filePath, (err) => {
         if (err) {
@@ -3229,7 +3230,7 @@ router.delete("/api/delete-photo-by-id/:id", (req, res) => {
         } else {
           console.log(`Successfully deleted file: ${filePath}`);
         }
-        
+
         // Delete database entry
         deletePhotoFromDB(photoId, user_email, res);
       });
@@ -3244,7 +3245,7 @@ router.delete("/api/delete-photo-by-id/:id", (req, res) => {
 // Helper function to delete photo entry from database
 function deletePhotoFromDB(photoId, user_email, res) {
   const query = "DELETE FROM photo_files WHERE photo_id = ? AND user_email = ?";
-  
+
   db.execute(query, [photoId, user_email], (err, result) => {
     if (err) {
       console.error("Database deletion error:", err);
@@ -3253,7 +3254,7 @@ function deletePhotoFromDB(photoId, user_email, res) {
         message: "Failed to delete photo from database"
       });
     }
-    
+
     console.log(`Successfully deleted photo ID ${photoId} from database`);
     res.json({
       success: true,
@@ -3268,12 +3269,12 @@ router.get("/portfolio-image/folder-thumbnail/:path(*)", (req, res) => {
   try {
     const imagePath = req.params.path;
     const fullPath = path.join(rootDirectory, imagePath);
-    
+
     // Check if file exists
     if (!fs.existsSync(fullPath)) {
       return res.status(404).send("Image not found");
     }
-    
+
     // Serve the file
     res.sendFile(fullPath);
   } catch (error) {
@@ -3288,13 +3289,13 @@ router.post("/owner-folders/upload-direct", (req, res) => {
   const busboy = require('busboy');
   const path = require('path');
   const fs = require('fs');
-  
+
   try {
     console.log("Upload-direct endpoint hit");
     console.log("Content-Type:", req.headers['content-type']);
-    
+
     const bb = busboy({ headers: req.headers });
-    
+
     // Variables to collect form data
     let folder_id;
     let user_email;
@@ -3302,7 +3303,7 @@ router.post("/owner-folders/upload-direct", (req, res) => {
     const uploadedFiles = [];
     let fileCount = 0; // Count of files processed
     let completedCount = 0; // Count of files successfully processed
-    
+
     // Handle regular form fields
     bb.on('field', (name, val) => {
       console.log(`Field received: ${name} = ${val}`);
@@ -3310,27 +3311,27 @@ router.post("/owner-folders/upload-direct", (req, res) => {
       if (name === 'user_email') user_email = val;
       if (name === 'folder_name') folder_name = val;
     });
-    
+
     // Handle file fields
     bb.on('file', (name, file, info) => {
       console.log(`File received: ${name}, filename: ${info.filename}, mimeType: ${info.mimeType}`);
       fileCount++;
-      
+
       if (name !== 'files') {
         console.log(`Skipping file with field name: ${name}`);
         file.resume(); // Skip this file if field name is not 'files'
         return;
       }
-      
+
       const { filename, mimeType } = info;
-      
+
       // Make sure required data is available
       if (!user_email || !folder_name) {
         console.log("Missing user_email or folder_name, cannot save file");
         file.resume(); // Skip this file
         return;
       }
-      
+
       // Create directories if they don't exist
       const serverRootDir = path.join(__dirname, '..');
       const baseDir = path.join(serverRootDir, 'root');
@@ -3339,38 +3340,38 @@ router.post("/owner-folders/upload-direct", (req, res) => {
       const portfolioDir = path.join(driveDir, 'portfolio');
       const foldersDir = path.join(portfolioDir, 'folders');
       const folderDir = path.join(foldersDir, folder_name);
-      
+
       // Log paths for debugging
       console.log("Saving file to:", folderDir);
-      
+
       // Create directory structure if it doesn't exist
       try {
         fs.mkdirSync(folderDir, { recursive: true });
       } catch (dirErr) {
         console.error("Error creating directories:", dirErr);
       }
-      
+
       // Generate unique filename to avoid conflicts
       const uniquePrefix = Date.now() + '-' + Math.round(Math.random() * 1E9);
       const safeFileName = uniquePrefix + '-' + filename.replace(/[^a-zA-Z0-9.-]/g, '_');
       const filePath = path.join(folderDir, safeFileName);
-      
+
       // Construct the relative path as stored in the database
       const fileUrlPath = `/root/${user_email}/drive/portfolio/folders/${folder_name}/${safeFileName}`;
-      
+
       // Create write stream and pipe file to it
       const writeStream = fs.createWriteStream(filePath);
-      
+
       // Add to list of files being processed
       const fileInfo = {
         name: filename,
         type: mimeType,
         path: fileUrlPath
       };
-      
+
       // Track completion
       let fileWritten = false;
-      
+
       // Handle file completion
       writeStream.on('finish', () => {
         console.log(`File saved: ${filePath}`);
@@ -3378,41 +3379,41 @@ router.post("/owner-folders/upload-direct", (req, res) => {
         uploadedFiles.push(fileInfo);
         completedCount++;
       });
-      
+
       // Handle errors
       writeStream.on('error', (err) => {
         console.error('Error writing file:', err);
       });
-      
+
       // Pipe the file data to the file
       file.pipe(writeStream);
     });
-    
+
     // Handle parsing completion
     bb.on('finish', () => {
-      console.log("Finished processing request", { 
-        folder_id, 
+      console.log("Finished processing request", {
+        folder_id,
         uploadedFiles: uploadedFiles.length,
         totalFiles: fileCount,
         completedFiles: completedCount
       });
-      
+
       if (!folder_id) {
         return res.status(400).json({ error: "Missing folder ID" });
       }
-      
+
       // Wait a bit for any file writes to complete
       setTimeout(() => {
         if (uploadedFiles.length === 0) {
           return res.status(400).json({ error: "No files uploaded" });
         }
-        
+
         // Insert file records in database
         const query = `
           INSERT INTO owner_folders_files (folder_id, file_name, file_type, file_data)
           VALUES (?, ?, ?, ?)
         `;
-        
+
         const insertPromises = uploadedFiles.map((file) => {
           return new Promise((resolve, reject) => {
             db.query(
@@ -3420,15 +3421,15 @@ router.post("/owner-folders/upload-direct", (req, res) => {
               [folder_id, file.name, file.type, file.path],
               (err, result) => {
                 if (err) reject(err);
-                else resolve({...result, fileName: file.name});
+                else resolve({ ...result, fileName: file.name });
               }
             );
           });
         });
-        
+
         Promise.all(insertPromises)
           .then((results) => {
-            res.status(201).json({ 
+            res.status(201).json({
               message: "Files uploaded successfully",
               files: uploadedFiles.map(f => f.name),
               total: fileCount,
@@ -3442,13 +3443,13 @@ router.post("/owner-folders/upload-direct", (req, res) => {
           });
       }, 1000); // Wait 1 second to make sure all file writes are complete
     });
-    
+
     // Handle parsing errors
     bb.on('error', (err) => {
       console.error('Busboy error:', err);
       res.status(500).json({ error: "Error parsing upload request" });
     });
-    
+
     // Pipe request to busboy for processing
     req.pipe(bb);
   }
@@ -3461,12 +3462,12 @@ router.post("/owner-folders/upload-direct", (req, res) => {
 // Serve file images by path
 router.get("/portfolio-image-file", (req, res) => {
   const filePath = req.query.path;
-  
+
   if (!filePath) {
     return res.status(400).send("Missing file path");
   }
-  
-  
+
+
   try {
     // The path stored in the database starts with /root/
     // Need to resolve to the actual file location on the server
@@ -3476,18 +3477,18 @@ router.get("/portfolio-image-file", (req, res) => {
     // Check if file exists
     if (!fs.existsSync(fullPath)) {
       console.error(`File not found at path: ${fullPath}`);
-      
+
       // Try an alternative path as a fallback
       const altPath = path.join(path.dirname(serverRootDir), "root", filePath.replace('/root/', ''));
       console.log("Trying alternative path:", altPath);
-      
+
       if (fs.existsSync(altPath)) {
         console.log("File found at alternative path");
-        
+
         // Determine content type based on file extension
         const ext = path.extname(altPath).toLowerCase();
         let contentType = 'application/octet-stream'; // Default
-        
+
         // Set appropriate content type based on file extension
         switch (ext) {
           case '.jpg':
@@ -3507,19 +3508,19 @@ router.get("/portfolio-image-file", (req, res) => {
             contentType = 'video/mp4';
             break;
         }
-        
+
         // Set content type and send file
         res.setHeader('Content-Type', contentType);
         return res.sendFile(altPath);
       }
-      
+
       return res.status(404).send("File not found");
     }
-    
+
     // Determine content type based on file extension
     const ext = path.extname(fullPath).toLowerCase();
     let contentType = 'application/octet-stream'; // Default
-    
+
     // Set appropriate content type based on file extension
     switch (ext) {
       case '.jpg':
@@ -3539,11 +3540,11 @@ router.get("/portfolio-image-file", (req, res) => {
         contentType = 'video/mp4';
         break;
     }
-    
+
     // Set content type and send file
     res.setHeader('Content-Type', contentType);
     res.sendFile(fullPath);
-  } 
+  }
   catch (error) {
     console.error("Error serving file:", error);
     res.status(500).send("Server error");
