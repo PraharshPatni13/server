@@ -1447,4 +1447,115 @@ router.post("/team_assignment_stats", async (req, res) => {
   }
 });
 
+router.post("/get-event-team-members", (req, res) => {
+  const { event_id } = req.body;
+
+  if (!event_id) {
+    return res.status(400).json({ message: "Event ID is required" });
+  }
+
+  console.log("get-event-team-members called with event_id:", event_id);
+
+  // First check if the event exists
+  const eventQuery = "SELECT id, assigned_team_member FROM event_request WHERE id = ?";
+  
+  db.query(eventQuery, [event_id], (eventErr, eventResults) => {
+    if (eventErr) {
+      console.error("Error checking event existence:", eventErr);
+      return res.status(500).json({ message: "Database error", error: eventErr });
+    }
+    
+    if (eventResults.length === 0) {
+      console.log("Event not found with ID:", event_id);
+      return res.status(404).json({ message: "Event not found" });
+    }
+    
+    const event = eventResults[0];
+    console.log("Found event:", event);
+    
+    // Try to parse assigned_team_member if it exists
+    let assignedTeamMembers = [];
+    try {
+      // This handles the old format where team members were stored in a JSON array
+      if (event.assigned_team_member) {
+        if (typeof event.assigned_team_member === 'string') {
+          assignedTeamMembers = JSON.parse(event.assigned_team_member);
+        } else {
+          assignedTeamMembers = event.assigned_team_member;
+        }
+        
+        if (!Array.isArray(assignedTeamMembers)) {
+          assignedTeamMembers = [assignedTeamMembers];
+        }
+      }
+    } catch (parseError) {
+      console.error("Error parsing assigned_team_member:", parseError);
+    }
+    
+    // If we have assigned team members in the old format, fetch them directly
+    if (assignedTeamMembers.length > 0) {
+      console.log("Using legacy format for team members:", assignedTeamMembers);
+      
+      // Query to get team member details
+      const memberQuery = `
+        SELECT member_id, member_name, member_profile_img, team_member_email
+        FROM team_member 
+        WHERE member_id IN (?)
+      `;
+      
+      db.query(memberQuery, [assignedTeamMembers], (memberErr, memberResults) => {
+        if (memberErr) {
+          console.error("Error fetching team member details:", memberErr);
+          return res.status(500).json({ message: "Database error", error: memberErr });
+        }
+        
+        // Add a default confirmation status since it's not stored in the old format
+        const resultWithStatus = memberResults.map(member => ({
+          ...member,
+          confirmation_status: "Accepted", // Default status
+          role_in_event: "Team Member" // Default role
+        }));
+        
+        console.log("Returning legacy team members:", resultWithStatus);
+        return res.json(resultWithStatus);
+      });
+    } else {
+      // Try to fetch from the new event_team_member table
+      console.log("Checking event_team_member table for event_id:", event_id);
+      
+      // Check if event_team_member table exists
+      db.query("SHOW TABLES LIKE 'event_team_member'", (tableErr, tableResults) => {
+        if (tableErr) {
+          console.error("Error checking table existence:", tableErr);
+          return res.status(500).json({ message: "Database error", error: tableErr });
+        }
+        
+        if (tableResults.length === 0) {
+          console.log("event_team_member table doesn't exist, returning empty array");
+          return res.json([]);
+        }
+        
+        // Table exists, query from it
+        const query = `
+          SELECT etm.member_id, etm.confirmation_status, etm.role_in_event,
+                 tm.member_name, tm.member_profile_img, tm.team_member_email
+          FROM event_team_member etm
+          JOIN team_member tm ON etm.member_id = tm.member_id
+          WHERE etm.event_id = ?
+        `;
+        
+        db.query(query, [event_id], (err, results) => {
+          if (err) {
+            console.error("Error fetching event team members:", err);
+            return res.status(500).json({ message: "Failed to fetch team members", error: err });
+          }
+          
+          console.log("Successfully fetched team members from event_team_member table:", results);
+          res.json(results);
+        });
+      });
+    }
+  });
+});
+
 module.exports = router;
