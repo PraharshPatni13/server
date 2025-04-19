@@ -3,13 +3,27 @@ const CryptoJS = require('crypto-js');
 const router = express.Router();
 const mysql = require("mysql2");
 const moment = require("moment");
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
 
 require('dotenv').config();
-const { send_team_invitation_email, send_owner_notification_email } = require('../modules/send_server_email');
+const { send_team_invitation_email, send_owner_notification_email, send_team_event_confirmation_email } = require('../modules/send_server_email');
 
+function formatDateTime(inputStr) {
+  const date = new Date(inputStr);
+
+  const day = date.getDate();
+  const month = date.toLocaleString('default', { month: 'long' });
+  const year = date.getFullYear();
+
+  let hours = date.getHours();
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+
+  return `On ${day} ${month} ${year} at ${hours}:${minutes} ${ampm}`;
+}
 const db = mysql.createConnection({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -149,93 +163,47 @@ router.post("/filtered_team_member", (req, res) => {
   }
 
   // Format dates properly to ensure consistent comparison
-  const formattedStartDate = new Date(start_date).toISOString().slice(0, 19).replace('T', ' ');
-  const formattedEndDate = new Date(end_date).toISOString().slice(0, 19).replace('T', ' ');
+  const formattedStartDate = formatDateTime(start_date);
+  const formattedEndDate = formatDateTime(end_date);
 
-  // First, get all team members for this user
-  const teamQuery = `SELECT * FROM team_member WHERE owner_email = ?`;
-
-  db.query(teamQuery, [user_email], (teamErr, teamMembers) => {
-    if (teamErr) {
-      console.error("Error fetching team members:", teamErr);
-      return res.status(500).json({ message: "Database error", error: teamErr });
-    }
-
-
-    // Get all events that overlap with the requested date range
-    const eventsQuery = `
-      SELECT * FROM event_request 
-      WHERE receiver_email = ? 
-      AND (
-        (start_date <= ? AND end_date >= ?) OR  /* Event contains the requested period */
-        (start_date >= ? AND start_date <= ?) OR /* Event starts during requested period */
-        (end_date >= ? AND end_date <= ?)      /* Event ends during requested period */
-      )
-    `;
-
-    db.query(
-      eventsQuery,
-      [user_email, formattedEndDate, formattedStartDate, formattedStartDate, formattedEndDate, formattedStartDate, formattedEndDate],
-      (eventsErr, events) => {
-        if (eventsErr) {
-          console.error("Error fetching events:", eventsErr);
-          return res.status(500).json({ message: "Database error", error: eventsErr });
-        }
-
-        // Collect all assigned member IDs from all events
-        const busyMemberIds = new Set();
-
-        events.forEach(event => {
-          let assignedMembers = event.assigned_team_member;
-          // Parse JSON if needed
-          if (typeof assignedMembers === 'string') {
-            try {
-              assignedMembers = JSON.parse(assignedMembers);
-            } catch (err) {
-              console.error("Error parsing assigned members:", err);
-              assignedMembers = [];
-            }
-          }
-
-          // Handle different formats of assigned members
-          if (Array.isArray(assignedMembers)) {
-            assignedMembers.forEach(member => {
-
-              if (typeof member === 'object' && member.member_id) {
-                busyMemberIds.add(member.member_id);
-              } else if (typeof member === 'string') {
-                // Try to find member ID by name if string
-                const foundMember = teamMembers.find(m => m.member_name === member);
-                if (foundMember) {
-                  busyMemberIds.add(foundMember.member_id);
-                } else {
-                  console.log(`Could not find member by name: ${member}`);
-                }
-              } else if (typeof member === 'number' || !isNaN(parseInt(member))) {
-                // Handle case where member ID is directly provided as a number
-                const memberId = parseInt(member);
-                busyMemberIds.add(memberId);
-              } else {
-                console.log(`Unhandled member type: ${typeof member}, value:`, member);
-              }
-            });
-          } else {
-            console.log(`Assigned members is not an array: ${typeof assignedMembers}`);
-          }
-        });
-
-        // Convert to array
-        const busyMemberIdsArray = Array.from(busyMemberIds);
-
-
-        return res.status(200).json({
-          assignedTeamMembers: busyMemberIdsArray,
-          totalEvents: events.length,
-          totalTeamMembers: teamMembers.length
-        });
-      }
-    );
+  console.log("Filtering team members with params:", { 
+    user_email, 
+    formatted_start: formattedStartDate, 
+    formatted_end: formattedEndDate 
   });
+
+  // Query using the new event_team_member table
+  const query = `
+    SELECT DISTINCT etm.member_id
+    FROM event_team_member etm
+    JOIN event_request er ON etm.event_id = er.id
+    WHERE er.receiver_email = ?
+    AND (
+      (etm.start_date <= ? AND etm.end_date >= ?) OR  /* Event contains the requested period */
+      (etm.start_date >= ? AND etm.start_date <= ?) OR /* Event starts during requested period */
+      (etm.end_date >= ? AND etm.end_date <= ?)      /* Event ends during requested period */
+    )
+  `;
+
+  db.query(
+    query,
+    [user_email, formattedEndDate, formattedStartDate, formattedStartDate, formattedEndDate, formattedStartDate, formattedEndDate],
+    (err, results) => {
+      if (err) {
+        console.error("Error fetching busy team members:", err);
+        return res.status(500).json({ message: "Database error", error: err });
+      }
+
+      // Extract member IDs directly from query results
+      const busyMemberIds = results.map(row => row.member_id);
+      
+      console.log(`Found ${busyMemberIds.length} busy team members:`, busyMemberIds);
+      
+      return res.status(200).json({
+        assignedTeamMembers: busyMemberIds
+      });
+    }
+  );
 });
 
 
@@ -666,7 +634,7 @@ router.get("/confirmation/:member_id", (req, res) => {
     const ownerEmail = results[0]?.owner_email;
     const memberName = results[0]?.member_name;
 
-    if (currentStatus === "Confirmed") {
+    if (currentStatus === "Accepted") {
       const filePath = path.join(__dirname, "already_confirmed_template.html");
       fs.readFile(filePath, "utf8", (readErr, html) => {
         if (readErr) {
@@ -698,9 +666,9 @@ router.get("/confirmation/:member_id", (req, res) => {
       return;
     }
 
-    // Step 2: Update to Confirmed
+    // Step 2: Update to Accepted
     const updateQuery = "UPDATE team_member SET member_status = ? WHERE member_id = ?";
-    db.query(updateQuery, ["Confirmed", member_id], async (updateErr, result) => {
+    db.query(updateQuery, ["Accepted", member_id], async (updateErr, result) => {
       if (updateErr) {
         console.error("Error updating member status:", updateErr);
         return res.status(500).send("Could not update member to confirmed");
@@ -713,7 +681,7 @@ router.get("/confirmation/:member_id", (req, res) => {
           const ownerName = ownerResults[0].user_name;
 
           // Send email notification to owner
-          await send_owner_notification_email(ownerEmail, ownerName, memberName, "Confirmed");
+          await send_owner_notification_email(ownerEmail, ownerName, memberName, "Accepted");
         } else {
           console.error("Error fetching owner details for email:", ownerErr);
         }
@@ -729,7 +697,7 @@ router.get("/confirmation/:member_id", (req, res) => {
         }
 
         const renderedHtml = html
-          .replace(/{{status}}/g, "Confirmed")
+          .replace(/{{status}}/g, "Accepted")
           .replace(/{{message}}/g, "You've been successfully added to the team! 🎉");
 
         res.send(renderedHtml);
@@ -778,7 +746,7 @@ router.get("/rejection/:member_id", (req, res) => {
     const memberName = results[0]?.member_name;
 
     // If already confirmed or rejected, show proper UI
-    if (currentStatus === "Confirmed") {
+    if (currentStatus === "Accepted") {
       const filePath = path.join(__dirname, "already_confirmed_template.html"); // Make sure filename is correct
 
       return fs.readFile(filePath, "utf8", (readErr, html) => {
@@ -786,11 +754,6 @@ router.get("/rejection/:member_id", (req, res) => {
           console.error("Error loading HTML file:", readErr);
           return res.status(500).send("Error loading confirmation page");
         }
-
-        const msg =
-          currentStatus === "Confirmed"
-            ? "You’ve already accepted the invitation ✅"
-            : "You’ve already rejected the invitation ❌";
 
         const renderedHtml = html
           .replace(/{{status}}/g, currentStatus)
@@ -1006,8 +969,346 @@ router.post("/photographers", (req, res) => {
   );
 });
 
+// Create a new endpoint to handle team member assignment
+router.post("/add-team-members", async (req, res) => {
+  const { user_email, team_members, event_id } = req.body;
+  
+  if (!user_email || !team_members || !event_id) {
+    return res.status(400).json({ message: "Missing required parameters" });
+  }
+  
+  try {
+    // Get event information
+    const eventQuery = "SELECT * FROM event_request WHERE id = ?";
+    const [eventResult] = await db.promise().query(eventQuery, [event_id]);
+    
+    if (eventResult.length === 0) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    
+    const event = eventResult[0];
+    
+    // Get owner information for emails
+    const ownerQuery = "SELECT user_name, business_name FROM owner WHERE user_email = ?";
+    const [ownerResult] = await db.promise().query(ownerQuery, [user_email]);
+    
+    if (ownerResult.length === 0) {
+      return res.status(404).json({ message: "Owner not found" });
+    }
+    
+    const owner = ownerResult[0];
+    
+    // Begin transaction
+    await db.promise().beginTransaction();
+    
+    // Delete any existing assignments for this event (to handle updates)
+    await db.promise().query(
+      "DELETE FROM event_team_member WHERE event_id = ?",
+      [event_id]
+    );
+    
+    // Update event status to "Waiting on Team"
+    await db.promise().query(
+      "UPDATE event_request SET event_status = 'Waiting on Team' WHERE id = ?",
+      [event_id]
+    );
+    
+    // Add new assignments with 'Pending' status
+    for (const member of team_members) {
+      const memberId = member.member_id;
+      
+      // Insert with pending confirmation status
+      await db.promise().query(
+        `INSERT INTO event_team_member 
+         (event_id, member_id, assigned_by_email, start_date, end_date, role_in_event, confirmation_status)
+         VALUES (?, ?, ?, ?, ?, ?, 'Pending')`,
+        [event_id, memberId, user_email, event.start_date, event.end_date, 'Team Member']
+      );
+      
+      // Send confirmation email to team member
+      // We need to get the team member's email
+      const [memberData] = await db.promise().query(
+        "SELECT member_name, team_member_email FROM team_member WHERE member_id = ?",
+        [memberId]
+      );
 
+      let event_title;
 
+      if(event.event_request_type === 'package'){
+        event_title = event.package_name;
+      }else if (event.event_request_type === 'service'){
+        event_title = event.service_name;
+      }else if (event.event_request_type === 'equipment'){
+        event_title = event.event_name;
+      }
 
+      
+      if (memberData.length > 0 && memberData[0].team_member_email) {
+        // Send confirmation email
+        await send_team_event_confirmation_email(
+          memberData[0].team_member_email,
+          memberData[0].member_name,
+          event_id,
+          event_title,
+          event.start_date,
+          event.end_date,
+          event.location,
+          owner.user_name,
+          owner.business_name
+        );
+      }
+    }
+    
+    // Commit transaction
+    await db.promise().commit();
+    
+    // Emit socket event for real-time updates
+    req.io.emit(`event_team_assigned_${event_id}`, { 
+      event_id, 
+      status: 'Waiting on Team',
+      team_count: team_members.length
+    });
+    
+    res.json({ message: "Team members assigned successfully", status: "Waiting on Team" });
+  } catch (error) {
+    // Rollback on error
+    try {
+      await db.promise().rollback();
+    } catch (rollbackError) {
+      console.error("Rollback error:", rollbackError);
+    }
+    
+    console.error("Error assigning team members:", error);
+    res.status(500).json({ message: "Failed to assign team members", error: error.message });
+  }
+});
+
+// Add endpoints to handle team member confirmations
+router.get("/event-confirmation/:event_id/:member_email/:action", async (req, res) => {
+  const { event_id, member_email, action } = req.params;
+  
+  if (!event_id || !member_email || !['accept', 'reject'].includes(action)) {
+    return res.status(400).send("Invalid request parameters");
+  }
+  
+  try {
+    // Get member ID from email
+    const [memberData] = await db.promise().query(
+      "SELECT member_id, member_name FROM team_member WHERE team_member_email = ?",
+      [member_email]
+    );
+    
+    if (memberData.length === 0) {
+      return res.status(404).send("Team member not found");
+    }
+    
+    const member_id = memberData[0].member_id;
+    const member_name = memberData[0].member_name;
+    
+    // First, check if this member has already responded to this event
+    const [existingResponse] = await db.promise().query(
+      "SELECT confirmation_status FROM event_team_member WHERE event_id = ? AND member_id = ?",
+      [event_id, member_id]
+    );
+    
+    if (existingResponse.length > 0 && existingResponse[0].confirmation_status !== 'Pending') {
+      // Member has already responded, show appropriate template based on their existing response
+      const currentStatus = existingResponse[0].confirmation_status;
+      
+      // Get event details for the template
+      const [eventDetails] = await db.promise().query(
+        "SELECT * FROM event_request WHERE id = ?",
+        [event_id]
+      );
+      
+      if (eventDetails.length === 0) {
+        return res.status(404).send("Event not found");
+      }
+      
+      const event = eventDetails[0];
+      const startDate = formatDateTime(event.start_date);
+      const endDate = formatDateTime(event.end_date);
+      
+      // Choose the appropriate template
+      let templateFile;
+      if (currentStatus === 'Accepted') {
+        templateFile = 'already_accepted_event.html';
+      } else if (currentStatus === 'Rejected') {
+        templateFile = 'already_rejected_event.html';
+      }
+      
+      try {
+        // Read the template file
+        const template = await fs.readFile(path.join(__dirname, templateFile), 'utf8');
+
+        let event_title;
+
+        if(event.event_request_type === 'package'){
+          event_title = event.package_name;
+        }else if (event.event_request_type === 'service'){
+          event_title = event.service_name;
+        }else if (event.event_request_type === 'equipment'){
+          event_title = event.event_name;
+        }
+        // Replace placeholders with actual data
+        const renderedHtml = template
+          .replace(/{{event_title}}/g, event_title || 'Event')
+          .replace(/{{event_start}}/g, startDate)
+          .replace(/{{event_end}}/g, endDate)
+          .replace(/{{event_location}}/g, event.location || 'Not specified');
+        
+        return res.send(renderedHtml);
+      } catch (readError) {
+        console.error(`Error reading template: ${readError.message}`);
+        return res.status(500).send(`You have already ${currentStatus.toLowerCase()} this event.`);
+      }
+    }
+    
+    // If we reach here, the member hasn't responded yet, so process their response
+    
+    // Update confirmation status
+    const status = action === 'accept' ? 'Accepted' : 'Rejected';
+    
+    await db.promise().query(
+      "UPDATE event_team_member SET confirmation_status = ?, confirmation_date = NOW() WHERE event_id = ? AND member_id = ?",
+      [status, event_id, member_id]
+    );
+    
+    // Get event info
+    const [eventData] = await db.promise().query(
+      "SELECT title, receiver_email FROM event_request WHERE id = ?",
+      [event_id]
+    );
+    
+    if (eventData.length > 0) {
+      const event = eventData[0];
+      
+      // Get owner info
+      const [ownerData] = await db.promise().query(
+        "SELECT user_name FROM owner WHERE user_email = ?",
+        [event.receiver_email]
+      );
+      
+      // Check if all team members have responded
+      const [pendingMembers] = await db.promise().query(
+        "SELECT COUNT(*) AS pending_count FROM event_team_member WHERE event_id = ? AND confirmation_status = 'Pending'",
+        [event_id]
+      );
+      
+      // Check if any members declined
+      const [declinedMembers] = await db.promise().query(
+        "SELECT COUNT(*) AS declined_count FROM event_team_member WHERE event_id = ? AND confirmation_status = 'Rejected'",
+        [event_id]
+      );
+      
+      let newEventStatus = 'Waiting on Team';
+      
+      // If no pending members, update event status
+      if (pendingMembers[0].pending_count === 0) {
+        newEventStatus = declinedMembers[0].declined_count > 0 ? 'Team Incomplete' : 'Accepted';
+        
+        // Update event status
+        await db.promise().query(
+          "UPDATE event_request SET event_status = ? WHERE id = ?",
+          [newEventStatus, event_id]
+        );
+      }
+      
+      // Emit socket event for real-time updates
+      req.io.emit(`event_member_response_${event_id}`, {
+        event_id,
+        member_id,
+        member_name,
+        status,
+        event_status: newEventStatus
+      });
+      
+      // Also emit a general event update
+      req.io.emit(`event_status_changed_${event_id}`, {
+        event_id,
+        status: newEventStatus
+      });
+    }
+    
+    // Render confirmation page using HTML file templates
+    const templateFile = action === 'accept' 
+      ? 'event_confirmation_accepted.html' 
+      : 'event_confirmation_declined.html';
+    
+    try {
+      const template = await fs.readFile(path.join(__dirname, templateFile), 'utf8');
+      res.send(template);
+    } catch (readError) {
+      console.error(`Error reading confirmation template ${templateFile}:`, readError);
+      
+      // Fallback template if file not found
+      const fallbackHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; text-align: center;">
+          <h2 style="color: ${action === 'accept' ? '#22C55E' : '#EF4444'};">
+            ${action === 'accept' ? 'Event Accepted' : 'Event Rejected'}
+          </h2>
+          <p>You have ${action === 'accept' ? 'accepted' : 'rejected'} the event assignment.</p>
+          <p>The organizer has been notified of your response.</p>
+          <p>You may close this window.</p>
+        </div>
+      `;
+      
+      res.send(fallbackHtml);
+    }
+    
+  } catch (error) {
+    console.error("Error processing confirmation:", error);
+    res.status(500).send("An error occurred while processing your response");
+  }
+});
+
+// Add an endpoint to check event team confirmation status
+router.post("/check-event-team-status", async (req, res) => {
+  const { event_id } = req.body;
+  
+  if (!event_id) {
+    return res.status(400).json({ message: "Event ID is required" });
+  }
+  
+  try {
+    // Get all team members for this event with their confirmation status
+    const query = `
+      SELECT tm.member_id, tm.member_name, tm.team_member_email, 
+             etm.confirmation_status, etm.role_in_event
+      FROM event_team_member etm
+      JOIN team_member tm ON etm.member_id = tm.member_id
+      WHERE etm.event_id = ?
+    `;
+    
+    const [members] = await db.promise().query(query, [event_id]);
+    
+    // Get event status
+    const [eventData] = await db.promise().query(
+      "SELECT event_status FROM event_request WHERE id = ?",
+      [event_id]
+    );
+    
+    const eventStatus = eventData.length > 0 ? eventData[0].event_status : 'Unknown';
+    
+    // Count by status
+    const statusCounts = {
+      total: members.length,
+      confirmed: members.filter(m => m.confirmation_status === 'Accepted').length,
+      declined: members.filter(m => m.confirmation_status === 'Rejected').length,
+      pending: members.filter(m => m.confirmation_status === 'Pending').length
+    };
+    
+    res.json({
+      event_id,
+      event_status: eventStatus,
+      members,
+      status_counts: statusCounts
+    });
+    
+  } catch (error) {
+    console.error("Error checking event team status:", error);
+    res.status(500).json({ message: "Failed to check team status", error: error.message });
+  }
+});
 
 module.exports = router;

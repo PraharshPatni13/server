@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Assignment Confirmation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 25px;
+            background-color: #fff;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        h1 {
+            color: #4f46e5;
+            font-size: 24px;
+            margin-top: 0;
+        }
+        .event-details {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .event-details p {
+            margin: 8px 0;
+        }
+        .buttons {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 0 10px;
+            text-align: center;
+        }
+        .accept-button {
+            background-color: #22C55E;
+            color: white;
+        }
+        .reject-button {
+            background-color: #EF4444;
+            color: white;
+        }
+        .footer {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Event Assignment Confirmation</h1>
+        </div>
+        
+        <p>Hello {{member_name}},</p>
+        
+        <p>You've been assigned to an event by <strong>{{owner_name}}</strong> from <strong>{{business_name}}</strong>.</p>
+        
+        <div class="event-details">
+            <p><strong>Event:</strong> {{event_title}}</p>
+            <p><strong>Start Time:</strong> {{event_start}}</p>
+            <p><strong>End Time:</strong> {{event_end}}</p>
+            <p><strong>Location:</strong> {{event_location}}</p>
+        </div>
+        
+        <p>Please confirm whether you are available for this event by clicking one of the buttons below:</p>
+        
+        <div class="buttons">
+            <a href="{{accept_url}}" class="button accept-button">Accept</a>
+            <a href="{{reject_url}}" class="button reject-button">Decline</a>
+        </div>
+        
+        <p>Your response will be immediately sent to the event organizer.</p>
+        
+        <p>If you have any questions about this assignment, please contact {{owner_name}} directly.</p>
+        
+        <div class="footer">
+            <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+    </div>
+</body>
+</html>

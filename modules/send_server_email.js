@@ -173,11 +173,87 @@ async function send_owner_notification_email(owner_email, owner_name, member_nam
     }
 }
 
+async function send_team_event_confirmation_email(member_email, member_name, event_id, event_title, event_start, event_end, event_location, owner_name, business_name) {
+    try {
+        // Load the event confirmation template from file
+        let template;
+        try {
+            // Use the direct path to the HTML file
+            template = await fs.readFile(path.join(__dirname, 'team_event_confirmation.html'), 'utf8');
+        } catch (error) {
+            error_message(`Error reading team event confirmation template: ${error.message}`);
+            // Fallback inline HTML template
+            template = `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                    <h2 style="color: #333;">Event Assignment Confirmation Needed</h2>
+                    <p>Hello {{member_name}},</p>
+                    
+                    <p>You've been assigned to an event by {{owner_name}} from {{business_name}}:</p>
+                    
+                    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                        <p><strong>Event:</strong> {{event_title}}</p>
+                        <p><strong>Start:</strong> {{event_start}}</p>
+                        <p><strong>End:</strong> {{event_end}}</p>
+                        <p><strong>Location:</strong> {{event_location}}</p>
+                    </div>
+                    
+                    <p>Please confirm if you are available for this event:</p>
+                    
+                    <div style="text-align: center; margin: 25px 0;">
+                        <a href="{{accept_url}}" style="display: inline-block; padding: 10px 20px; background-color: #22C55E; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; margin-right: 10px;">
+                            Accept
+                        </a>
+                        <a href="{{reject_url}}" style="display: inline-block; padding: 10px 20px; background-color: #EF4444; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
+                            Decline
+                        </a>
+                    </div>
+                    
+                    <p style="color: #666; font-size: 14px;">If you have any questions, please contact {{owner_name}} directly.</p>
+                </div>
+            `;
+            info_message('Team event confirmation template not found, using fallback HTML');
+        }
+
+        // Convert dates to readable format
+        const startDate = new Date(event_start).toLocaleString();
+        const endDate = new Date(event_end).toLocaleString();
+
+        // Create accept/reject URLs with the necessary parameters
+        const baseUrl = process.env.SERVER_URL || "http://localhost:5000";
+        const acceptUrl = `${baseUrl}/team_members/event-confirmation/${event_id}/${encodeURIComponent(member_email)}/accept`;
+        const rejectUrl = `${baseUrl}/team_members/event-confirmation/${event_id}/${encodeURIComponent(member_email)}/reject`;
+
+        // Replace placeholders in the template
+        const htmlContent = template
+            .replace(/{{member_name}}/g, member_name)
+            .replace(/{{event_title}}/g, event_title)
+            .replace(/{{event_start}}/g, startDate)
+            .replace(/{{event_end}}/g, endDate)
+            .replace(/{{event_location}}/g, event_location || "Not specified")
+            .replace(/{{owner_name}}/g, owner_name)
+            .replace(/{{business_name}}/g, business_name)
+            .replace(/{{accept_url}}/g, acceptUrl)
+            .replace(/{{reject_url}}/g, rejectUrl);
+
+        await send_email(
+            member_email,
+            `Event Assignment: ${event_title}`,
+            htmlContent
+        );
+
+        return true;
+    } catch (error) {
+        error_message('Failed to send team event confirmation email:', error);
+        return false;
+    }
+}
+
 module.exports = {
     send_welcome_page,
     send_otp_page,
     send_forgot_password_email,
     send_event_confirmation_email,
     send_team_invitation_email,
-    send_owner_notification_email
+    send_owner_notification_email,
+    send_team_event_confirmation_email
 };
