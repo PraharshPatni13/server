@@ -1411,7 +1411,7 @@ router.post("/team_assignment_stats", async (req, res) => {
   try {
     // Step 1: Get all team members for this owner
     const [teamMembers] = await db.promise().query(
-      "SELECT member_id, member_name FROM team_member WHERE owner_email = ? AND member_status = 'Active'",
+      "SELECT member_id, member_name,member_status FROM team_member WHERE owner_email = ? AND member_status = 'Active'",
       [user_email]
     );
 
@@ -1519,7 +1519,7 @@ router.post("/get-event-team-members", (req, res) => {
     return res.status(400).json({ message: "Event ID is required" });
   }
 
-  console.log("get-event-team-members called with event_id:", event_id);
+  console.log("get-event-team- members called with event_id:", event_id);
 
   // First check if the event exists
   const eventQuery = "SELECT id, assigned_team_member FROM event_request WHERE id = ?";

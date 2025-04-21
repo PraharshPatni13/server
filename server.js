@@ -8,6 +8,7 @@ const path = require('path');
 
 const shrey11_ = require('./sub_part/other_rout_shrey_11');
 const praharsh_routes = require("./sub_part/praharsh_routes");
+const drive_rout = require('./sub_part/Drive_rout.js');
 const adminRoutes = require('./sub_part/Admin_rout');
 const team_members = require('./sub_part/team_members');
 const ownerRoutes = require('./sub_part/owner_rout');
@@ -138,6 +139,9 @@ app.use('/', shrey11_);
 
 // admin routes
 app.use('/Admin', adminRoutes);
+
+// drive routes
+app.use('/drive', drive_rout);
 
 // owner routes
 app.use('/owner', ownerRoutes);
