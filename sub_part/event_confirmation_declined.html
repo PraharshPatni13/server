@@ -1,82 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Event Declined</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
     <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f7f7f7;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            padding: 0;
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f5f8fb;
+        font-family: 'Inter', sans-serif;
+        color: #2c3e50;
+      }
+
+      .email-container {
+        max-width: 560px;
+        margin: 40px auto;
+        background: #ffffff;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+      }
+
+      .email-header {
+        background: linear-gradient(135deg, #2c3e50, #3498db);
+        padding: 30px 20px;
+        text-align: center;
+        color: #ffffff;
+      }
+
+      .email-header h1 {
+        font-size: 24px;
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .email-body {
+        padding: 40px 30px;
+        text-align: center;
+      }
+
+      .svg-icon {
+        width: 90px;
+        height: 90px;
+        margin: 0 auto 25px;
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 8px 16px;
+        font-size: 14px;
+        background-color: #fee2e2;
+        color: #ef4444;
+        font-weight: 600;
+        border-radius: 30px;
+        margin-bottom: 20px;
+      }
+
+      .email-body h2 {
+        font-size: 22px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: #1f2937;
+      }
+
+      .email-body p {
+        font-size: 15px;
+        color: #4b5563;
+        line-height: 1.6;
+        margin: 8px 0;
+      }
+
+      .email-footer {
+        background: #f9fafb;
+        padding: 20px;
+        text-align: center;
+        font-size: 13px;
+        color: #9ca3af;
+        border-top: 1px solid #eee;
+      }
+
+      .button {
+        display: inline-block;
+        background-color: #4f46e5;
+        color: #fff;
+        padding: 12px 24px;
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 8px;
+        margin-top: 24px;
+        transition: background 0.3s ease;
+      }
+
+      .button:hover {
+        background-color: #4338ca;
+      }
+
+      @media only screen and (max-width: 600px) {
+        .email-container {
+          margin: 20px;
+          border-radius: 16px;
         }
-        .container {
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            padding: 30px;
-            text-align: center;
-            max-width: 500px;
-            width: 90%;
+
+        .email-body {
+          padding: 30px 20px;
         }
-        .header {
-            margin-bottom: 20px;
+
+        .svg-icon {
+          width: 70px;
+          height: 70px;
+          margin-bottom: 20px;
         }
-        .x-icon {
-            font-size: 60px;
-            color: #EF4444;
-            margin-bottom: 20px;
+
+        .email-body h2 {
+          font-size: 20px;
         }
-        h1 {
-            color: #EF4444;
-            font-size: 24px;
-            margin-bottom: 15px;
+
+        .email-header h1 {
+          font-size: 22px;
         }
-        p {
-            color: #666;
-            line-height: 1.6;
-            margin-bottom: 20px;
-        }
-        .footer {
-            margin-top: 30px;
-            font-size: 14px;
-            color: #888;
-        }
-        .button {
-            display: inline-block;
-            background-color: #4f46e5;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            text-decoration: none;
-            font-weight: 600;
-            margin-top: 20px;
-        }
-        .button:hover {
-            background-color: #4338ca;
-        }
+      }
     </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="x-icon">✗</div>
-            <h1>Event Declined</h1>
-            <p>Thank you for letting us know you are not available for this event. The organizer has been notified.</p>
+  </head>
+  <body>
+    <div class="email-container">
+      <div class="email-header">
+        <h1>TeamConnect</h1>
+      </div>
+      <div class="email-body">
+        <div class="svg-icon">
+          <!-- Red cross icon -->
+          <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" fill="none">
+            <circle cx="32" cy="32" r="30" fill="#fee2e2" />
+            <path d="M24 24l16 16M40 24L24 40" stroke="#ef4444" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="46" cy="20" r="2" fill="#f87171" />
+            <circle cx="18" cy="22" r="2.5" fill="#fb7185" />
+            <circle cx="22" cy="44" r="2" fill="#f43f5e" />
+          </svg>
         </div>
 
-        <p>You can now close this window. If your availability changes, please contact the event organizer directly.</p>
+        <div class="tag">Event Declined</div>
+        <h2>Response Recorded</h2>
+        <p>You’ve declined this event. The organizer has been informed of your unavailability.</p>
+        <p>If your schedule changes, please reach out to the organizer directly.</p>
 
         <a href="#" onclick="window.close()" class="button">Close Window</a>
-
-        <div class="footer">
-            <p>This is an automated confirmation. Please contact the event organizer with any questions.</p>
-        </div>
+      </div>
+      <div class="email-footer">
+        This is an automated confirmation. Please contact the event organizer with any questions.
+      </div>
     </div>
-</body>
-</html> 
+  </body>
+</html>

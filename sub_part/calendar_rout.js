@@ -94,7 +94,7 @@ router.post("/add-event-with-success", (req, res) => {
         return res.status(500).json({ error: "Failed to create event" });
       }
       console.log(sender_email, title, formatDate(start), formatDate(end), description, user_email);
-      send_event_confirmation_email(sender_email, title, formatDate(start), formatDate(end), description,event_location, user_email);
+      // send_event_confirmation_email(sender_email, title, formatDate(start), formatDate(end), description,event_location, user_email);
 
 
 

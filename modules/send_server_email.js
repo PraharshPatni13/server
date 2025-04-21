@@ -248,6 +248,26 @@ async function send_team_event_confirmation_email(member_email, member_name, eve
     }
 }
 
+async function notifyEventConfirmationUpdate(io, event_id, receiver_email) {
+  try {
+    // Emit socket events to notify the owner about team confirmation updates
+    if (io) {
+      io.emit(`event-confirmation-updated`, {
+        event_id,
+        receiver_email
+      });
+      
+      // Also emit event-specific update
+      io.emit(`event-status-update-${receiver_email}`);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Failed to send event confirmation notification:', error);
+    return false;
+  }
+}
+
 module.exports = {
     send_welcome_page,
     send_otp_page,
@@ -255,5 +275,6 @@ module.exports = {
     send_event_confirmation_email,
     send_team_invitation_email,
     send_owner_notification_email,
-    send_team_event_confirmation_email
+    send_team_event_confirmation_email,
+    notifyEventConfirmationUpdate
 };

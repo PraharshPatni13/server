@@ -8,7 +8,7 @@ const path = require('path');
 
 
 require('dotenv').config();
-const { send_team_invitation_email, send_owner_notification_email, send_team_event_confirmation_email } = require('../modules/send_server_email');
+const { send_team_invitation_email, send_owner_notification_email, send_team_event_confirmation_email, notifyEventConfirmationUpdate } = require('../modules/send_server_email');
 
 function formatDateTime(inputStr) {
   const date = new Date(inputStr);
@@ -995,7 +995,7 @@ router.post("/photographers", (req, res) => {
 
 // Create a new endpoint to handle team member assignment
 router.post("/add-team-members", async (req, res) => {
-  const { user_email, team_members, event_id } = req.body;
+  const { user_email, team_members, event_id, socket_id } = req.body;
 
   if (!user_email || !team_members || !event_id) {
     return res.status(400).json({ message: "Missing required parameters" });
@@ -1022,6 +1022,10 @@ router.post("/add-team-members", async (req, res) => {
 
     const owner = ownerResult[0];
 
+    // Create user-specific event names for socket events
+    const progressEventName = `email_sending_progress_for_${user_email}`;
+    const completeEventName = `email_sending_complete_for_${user_email}`;
+
     // Begin transaction
     await db.promise().beginTransaction();
 
@@ -1038,7 +1042,8 @@ router.post("/add-team-members", async (req, res) => {
     );
 
     // Add new assignments with 'Pending' status
-    for (const member of team_members) {
+    for (let i = 0; i < team_members.length; i++) {
+      const member = team_members[i];
       const memberId = member.member_id;
 
       // Insert with pending confirmation status
@@ -1066,8 +1071,21 @@ router.post("/add-team-members", async (req, res) => {
         event_title = event.event_name;
       }
 
-
       if (memberData.length > 0 && memberData[0].team_member_email) {
+        // Emit progress update via socket.io before sending the email - using user-specific event name
+        if (socket_id) {
+          req.io.to(socket_id).emit(progressEventName, {
+            emailIndex: i,
+            totalEmails: team_members.length,
+            eventId: event_id,
+            memberName: memberData[0].member_name,
+            memberEmail: memberData[0].team_member_email
+          });
+        }
+
+        // Add a small delay to simulate email sending process (useful for UI feedback)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
         // Send confirmation email
         await send_team_event_confirmation_email(
           memberData[0].team_member_email,
@@ -1086,7 +1104,16 @@ router.post("/add-team-members", async (req, res) => {
     // Commit transaction
     await db.promise().commit();
 
-    // Emit socket event for real-time updates
+    // Emit final socket event for UI update - using user-specific event name
+    if (socket_id) {
+      req.io.to(socket_id).emit(completeEventName, {
+        eventId: event_id,
+        status: 'Waiting on Team',
+        teamCount: team_members.length
+      });
+    }
+
+    // Also emit event for team assignment (used by other components)
     req.io.emit(`event_team_assigned_${event_id}`, {
       event_id,
       status: 'Waiting on Team',
@@ -1156,9 +1183,9 @@ router.get("/event-confirmation/:event_id/:member_email/:action", async (req, re
       // Choose the appropriate template
       let templateFile;
       if (currentStatus === 'Accepted') {
-        templateFile = 'already_accepted_event.html';
+        templateFile = 'already_confirmed_template.html';
       } else if (currentStatus === 'Rejected') {
-        templateFile = 'already_rejected_event.html';
+        templateFile = 'already_rejected_template.html';
       }
 
       try {
@@ -1236,22 +1263,60 @@ router.get("/event-confirmation/:event_id/:member_email/:action", async (req, re
           "UPDATE event_request SET event_status = ? WHERE id = ?",
           [newEventStatus, event_id]
         );
+        
+        // Get event details to notify sender if all team members have confirmed
+        const [eventDetails] = await db.promise().query(
+          "SELECT * FROM event_request WHERE id = ?",
+          [event_id]
+        );
+        
+        if (eventDetails.length > 0 && newEventStatus === 'Accepted') {
+          const eventData = eventDetails[0];
+          
+          // Send confirmation email to the sender (client) only after all team members confirmed
+          try {
+            // Import the email module if needed
+            const { send_event_confirmation_email } = require('../modules/send_server_email');
+            
+            // Format the event title based on event type
+            let eventTitle = '';
+            if (eventData.event_request_type === 'package') {
+              eventTitle = eventData.package_name;
+            } else if (eventData.event_request_type === 'equipment') {
+              eventTitle = eventData.equipment_name || eventData.event_name;
+            } else if (eventData.event_request_type === 'service') {
+              eventTitle = eventData.service_name;
+            }
+            
+            // Get owner name for the email
+            const [ownerInfo] = await db.promise().query(
+              "SELECT user_name FROM owner WHERE user_email = ?", 
+              [eventData.receiver_email]
+            );
+            
+            const ownerName = ownerInfo.length > 0 ? ownerInfo[0].user_name : "Event Organizer";
+            
+            // Send the confirmation email to sender
+            await send_event_confirmation_email(
+              eventData.sender_email,
+              eventTitle,
+              formatDateTime(eventData.start_date),
+              formatDateTime(eventData.end_date),
+              eventData.requirements || "No specific requirements",
+              eventData.location || "Location not specified",
+              ownerName
+            );
+            
+            console.log(`Confirmation email sent to sender ${eventData.sender_email} after all team members confirmed`);
+          } catch (emailError) {
+            console.error("Error sending confirmation email to sender:", emailError);
+          }
+        }
       }
 
       // Emit socket event for real-time updates
-      req.io.emit(`event_member_response_${event_id}`, {
-        event_id,
-        member_id,
-        member_name,
-        status,
-        event_status: newEventStatus
-      });
+      await notifyEventConfirmationUpdate(req.io, event_id, event.receiver_email);
 
-      // Also emit a general event update
-      req.io.emit(`event_status_changed_${event_id}`, {
-        event_id,
-        status: newEventStatus
-      });
     }
 
     // Render confirmation page using HTML file templates
@@ -1556,6 +1621,53 @@ router.post("/get-event-team-members", (req, res) => {
       });
     }
   });
+});
+
+// Route to check for events that have ended and update their status
+router.get("/check-past-events/:user_email", async (req, res) => {
+  const { user_email } = req.params;
+  
+  if (!user_email) {
+    return res.status(400).json({ error: "User email is required" });
+  }
+
+  try {
+    const now = new Date();
+    
+    // Find events where:
+    // 1. The user is the receiver
+    // 2. End date has passed
+    // 3. Status is not already "Completed" or "Rejected"
+    const query = `
+      UPDATE event_request 
+      SET 
+        event_status = CASE 
+          WHEN event_status = 'Accepted' THEN 'Completed'
+          WHEN event_status != 'Rejected' THEN 'Event Expired'
+          ELSE event_status
+        END
+      WHERE 
+        receiver_email = ? 
+        AND end_date < ?
+        AND event_status NOT IN ('Completed', 'Event Expired', 'Rejected')
+    `;
+    
+    const [result] = await db.promise().query(query, [user_email, now]);
+    
+    // Check if any rows were affected
+    const updated = result.affectedRows > 0;
+    
+    // If any events were updated, emit a socket event
+    if (updated) {
+      req.io.emit(`event-status-update-${user_email}`);
+    }
+    
+    return res.json({ updated, count: result.affectedRows });
+    
+  } catch (error) {
+    console.error("Error checking past events:", error);
+    return res.status(500).json({ error: "Database error", details: error.message });
+  }
 });
 
 module.exports = router;
