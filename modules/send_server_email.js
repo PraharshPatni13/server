@@ -116,6 +116,8 @@ async function send_team_invitation_email(member_email, member_name, owner_name,
             .replace(/{{member_role}}/g, member_role)
             .replace(/{{invitation_link}}/g, invitationLink);
 
+        console.log("sending email on the route")
+
         await send_email(
             member_email,
             `Invitation to join ${business_name} as a team member`,
@@ -249,23 +251,23 @@ async function send_team_event_confirmation_email(member_email, member_name, eve
 }
 
 async function notifyEventConfirmationUpdate(io, event_id, receiver_email) {
-  try {
-    // Emit socket events to notify the owner about team confirmation updates
-    if (io) {
-      io.emit(`event-confirmation-updated`, {
-        event_id,
-        receiver_email
-      });
-      
-      // Also emit event-specific update
-      io.emit(`event-status-update-${receiver_email}`);
+    try {
+        // Emit socket events to notify the owner about team confirmation updates
+        if (io) {
+            io.emit(`event-confirmation-updated`, {
+                event_id,
+                receiver_email
+            });
+
+            // Also emit event-specific update
+            io.emit(`event-status-update-${receiver_email}`);
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Failed to send event confirmation notification:', error);
+        return false;
     }
-    
-    return true;
-  } catch (error) {
-    console.error('Failed to send event confirmation notification:', error);
-    return false;
-  }
 }
 
 module.exports = {

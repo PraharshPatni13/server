@@ -534,26 +534,33 @@ router.post("/invite_member", async (req, res) => {
 });
 
 
-router.get("/accept-invitation/:member_id", (req, res) => {
+router.get("/accept-invitation/:member_id", async (req, res) => {
   const { member_id } = req.params;
+  console.log("inside the accept invitation route")
 
-  const memberQuery = "SELECT * FROM team_member WHERE member_id = ?";
+  try {
+    // Query for member info
+    const memberQuery = "SELECT * FROM team_member WHERE member_id = ?";
 
-  db.query(memberQuery, [member_id], (memberErr, memberResults) => {
-    if (memberResults.length === 0) {
+    const [memberResults] = await new Promise((resolve, reject) => {
+      db.query(memberQuery, [member_id], (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+
+    if (!memberResults || memberResults.length === 0) {
       const file_path = "Member_not_found.html"
       const full_path = path.join(__dirname, file_path);
-      fs.readFile(full_path, 'utf8', (readErr, html) => {
-        if (readErr) {
-          console.error("Error reading confirmation template:", readErr);
-          return res.status(500).send("Error loading confirmation page");
-        }
-
-        const renderedHtml = html
-          .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL)
-
+      try {
+        const html = await fs.readFile(full_path, 'utf8');
+        const renderedHtml = html.replace(/{{SERVER_URL}}/g, process.env.SERVER_URL);
+        console.log("sending the rendered html");
         return res.send(renderedHtml);
-      });
+      } catch (readErr) {
+        console.error("Error reading confirmation template:", readErr);
+        return res.status(500).send("Error loading confirmation page");
+      }
       return;
     }
 
@@ -562,39 +569,47 @@ router.get("/accept-invitation/:member_id", (req, res) => {
 
     const ownerQuery = "SELECT user_name, business_name FROM owner WHERE user_email = ?";
 
-    db.query(ownerQuery, [ownerEmail], (ownerErr, ownerResults) => {
-      if (ownerErr || ownerResults.length === 0) {
-        console.error("Error fetching owner info:", ownerErr);
-        return res.status(500).send("Owner info not found");
-      }
-
-      const owner = ownerResults[0];
-      const accept_route = `${process.env.SERVER_URL}/team_members/confirmation/${member_id}`
-      const reject_route = `${process.env.SERVER_URL}/team_members/rejection/${member_id}`
-
-      // 🧾 Load and render the HTML template
-      const filePath = path.join(__dirname, 'invitation_template.html');
-      fs.readFile(filePath, 'utf8', (readErr, html) => {
-        if (readErr) {
-          console.error('Error reading template:', readErr);
-          return res.status(500).send('Error loading invitation page');
-        }
-
-
-        const renderedHtml = html
-          .replace(/{{business_name}}/g, owner.business_name || "Your Business")
-          .replace(/{{member_email}}/g, member.team_member_email || "Team Member")
-          .replace(/{{owner_name}}/g, owner.user_name || "Owner")
-          .replace(/{{member_role}}/g, member.member_role || "Role")
-          .replace(/{{member_id}}/g, member.member_id.toString())
-          .replace(/{{accept_route}}/g, accept_route)
-          .replace(/{{reject_route}}/g, reject_route)
-          .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL);
-
-        res.send(renderedHtml);
+    const [ownerResults] = await new Promise((resolve, reject) => {
+      db.query(ownerQuery, [ownerEmail], (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
       });
     });
-  });
+
+    if (!ownerResults || ownerResults.length === 0) {
+      console.error("Error fetching owner info");
+      return res.status(500).send("Owner info not found");
+    }
+
+    const owner = ownerResults[0];
+    const accept_route = `${process.env.SERVER_URL}/team_members/confirmation/${member_id}`
+    const reject_route = `${process.env.SERVER_URL}/team_members/rejection/${member_id}`
+
+    // Load and render the HTML template using async/await
+    const filePath = path.join(__dirname, 'invitation_template.html');
+    try {
+      const html = await fs.readFile(filePath, 'utf8');
+
+      const renderedHtml = html
+        .replace(/{{business_name}}/g, owner.business_name || "Your Business")
+        .replace(/{{member_email}}/g, member.team_member_email || "Team Member")
+        .replace(/{{owner_name}}/g, owner.user_name || "Owner")
+        .replace(/{{member_role}}/g, member.member_role || "Role")
+        .replace(/{{member_id}}/g, member.member_id.toString())
+        .replace(/{{accept_route}}/g, accept_route)
+        .replace(/{{reject_route}}/g, reject_route)
+        .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL);
+
+      console.log("rendered html", renderedHtml);
+      return res.send(renderedHtml);
+    } catch (readErr) {
+      console.error('Error reading template:', readErr);
+      return res.status(500).send('Error loading invitation page');
+    }
+  } catch (error) {
+    console.error("Error in accept-invitation route:", error);
+    return res.status(500).send("Server error");
+  }
 });
 
 router.post("/check_email_exists", (req, res) => {
@@ -623,34 +638,33 @@ router.post("/check_email_exists", (req, res) => {
 
 
 // confirm invitation 
-router.get("/confirmation/:member_id", (req, res) => {
+router.get("/confirmation/:member_id", async (req, res) => {
   const { member_id } = req.params;
 
   if (!member_id) {
     return res.status(400).send("Member ID is required");
   }
 
-  const checkStatusQuery = "SELECT member_status, owner_email, member_name, team_member_email FROM team_member WHERE member_id = ?";
-  db.query(checkStatusQuery, [member_id], (checkErr, results) => {
-    if (checkErr) {
-      console.error("Error checking member status:", checkErr);
-      return res.status(500).send("Database error");
-    }
-
-    if (results.length === 0) {
-      const file_path = "Member_not_found.html"
-      const full_path = path.join(__dirname, file_path);
-      fs.readFile(full_path, 'utf8', (readErr, html) => {
-        if (readErr) {
-          console.error("Error reading confirmation template:", readErr);
-          return res.status(500).send("Error loading confirmation page");
-        }
-
-        const renderedHtml = html
-          .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL)
-
-        return res.send(renderedHtml);
+  try {
+    const checkStatusQuery = "SELECT member_status, owner_email, member_name, team_member_email FROM team_member WHERE member_id = ?";
+    const [results] = await new Promise((resolve, reject) => {
+      db.query(checkStatusQuery, [member_id], (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
       });
+    });
+
+    if (!results || results.length === 0) {
+      const file_path = "Member_not_found.html";
+      const full_path = path.join(__dirname, file_path);
+      try {
+        const html = await fs.readFile(full_path, 'utf8');
+        const renderedHtml = html.replace(/{{SERVER_URL}}/g, process.env.SERVER_URL);
+        return res.send(renderedHtml);
+      } catch (readErr) {
+        console.error("Error reading confirmation template:", readErr);
+        return res.status(500).send("Error loading confirmation page");
+      }
       return;
     }
 
@@ -660,110 +674,106 @@ router.get("/confirmation/:member_id", (req, res) => {
 
     if (currentStatus === "Accepted") {
       const filePath = path.join(__dirname, "already_confirmed_template.html");
-      fs.readFile(filePath, "utf8", (readErr, html) => {
-        if (readErr) {
-          console.error("Error loading HTML file:", readErr);
-          return res.status(500).send("Error loading confirmation page");
-        }
-
-        const renderedHtml = html
-          .replace(/{{status}}/g, currentStatus)
-
+      try {
+        const html = await fs.readFile(filePath, "utf8");
+        const renderedHtml = html.replace(/{{status}}/g, currentStatus);
         return res.send(renderedHtml);
-      });
+      } catch (readErr) {
+        console.error("Error loading HTML file:", readErr);
+        return res.status(500).send("Error loading confirmation page");
+      }
       return;
     }
+
     if (currentStatus === "Rejected") {
       const filePath = path.join(__dirname, "already_rejected_template.html");
-      fs.readFile(filePath, "utf8", (readErr, html) => {
-        if (readErr) {
-          console.error("Error loading HTML file:", readErr);
-          return res.status(500).send("Error loading confirmation page");
-        }
-
-        const renderedHtml = html
-          .replace(/{{status}}/g, currentStatus)
-        // .replace(/{{message}}/g, msg);
-
+      try {
+        const html = await fs.readFile(filePath, "utf8");
+        const renderedHtml = html.replace(/{{status}}/g, currentStatus);
         return res.send(renderedHtml);
-      });
+      } catch (readErr) {
+        console.error("Error loading HTML file:", readErr);
+        return res.status(500).send("Error loading confirmation page");
+      }
       return;
     }
 
     // Step 2: Update to Accepted
     const updateQuery = "UPDATE team_member SET member_status = ? WHERE member_id = ?";
-    db.query(updateQuery, ["Accepted", member_id], async (updateErr, result) => {
-      if (updateErr) {
-        console.error("Error updating member status:", updateErr);
-        return res.status(500).send("Could not update member to confirmed");
-      }
-
-      // Get owner name for email notification
-      const ownerQuery = "SELECT user_name FROM owner WHERE user_email = ?";
-      db.query(ownerQuery, [ownerEmail], async (ownerErr, ownerResults) => {
-        if (!ownerErr && ownerResults.length > 0) {
-          const ownerName = ownerResults[0].user_name;
-
-          // Send email notification to owner
-          await send_owner_notification_email(ownerEmail, ownerName, memberName, "Accepted");
-        } else {
-          console.error("Error fetching owner details for email:", ownerErr);
-        }
-      });
-
-      req.io.emit(`user_confirmation_updated_team_member`);
-
-      const filePath = path.join(__dirname, 'confirmation_template.html'); // Match the correct file
-      fs.readFile(filePath, 'utf8', (readErr, html) => {
-        if (readErr) {
-          console.error("Error reading confirmation template:", readErr);
-          return res.status(500).send("Error loading confirmation page");
-        }
-
-        const renderedHtml = html
-          .replace(/{{status}}/g, "Accepted")
-          .replace(/{{message}}/g, "You've been successfully added to the team! 🎉");
-
-        res.send(renderedHtml);
+    await new Promise((resolve, reject) => {
+      db.query(updateQuery, ["Accepted", member_id], (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
       });
     });
-  });
+
+    // Get owner name for email notification
+    const ownerQuery = "SELECT user_name FROM owner WHERE user_email = ?";
+    const [ownerResults] = await new Promise((resolve, reject) => {
+      db.query(ownerQuery, [ownerEmail], (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+
+    if (ownerResults && ownerResults.length > 0) {
+      const ownerName = ownerResults[0].user_name;
+      // Send email notification to owner
+      await send_owner_notification_email(ownerEmail, ownerName, memberName, "Accepted");
+    }
+
+    req.io.emit(`user_confirmation_updated_team_member`);
+
+    const filePath = path.join(__dirname, 'confirmation_template.html'); // Match the correct file
+    try {
+      const html = await fs.readFile(filePath, 'utf8');
+      const renderedHtml = html
+        .replace(/{{status}}/g, "Accepted")
+        .replace(/{{message}}/g, "You've been successfully added to the team! 🎉");
+
+      return res.send(renderedHtml);
+    } catch (readErr) {
+      console.error("Error reading confirmation template:", readErr);
+      return res.status(500).send("Error loading confirmation page");
+    }
+  } catch (error) {
+    console.error("Error in confirmation route:", error);
+    return res.status(500).send("Server error");
+  }
 });
 
 // reject invitation
-router.get("/rejection/:member_id", (req, res) => {
+router.get("/rejection/:member_id", async (req, res) => {
   const { member_id } = req.params;
 
   if (!member_id) {
     return res.status(400).json({ error: "Member id not available" });
   }
 
+  try {
+    // Step 1: Check current member_status
+    const checkStatusQuery = "SELECT member_status, owner_email, member_name FROM team_member WHERE member_id = ?";
+    const [results] = await new Promise((resolve, reject) => {
+      db.query(checkStatusQuery, [member_id], (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
 
-  // Step 1: Check current member_status
-  const checkStatusQuery = "SELECT member_status, owner_email, member_name FROM team_member WHERE member_id = ?";
-  db.query(checkStatusQuery, [member_id], (checkErr, results) => {
-    if (checkErr) {
-      console.error("Error checking member status:", checkErr);
-      return res.status(500).send("Database error");
-    }
-
-    if (results.length === 0) {
+    if (!results || results.length === 0) {
       const file_path = "Member_not_found.html"
       const full_path = path.join(__dirname, file_path);
-      fs.readFile(full_path, 'utf8', (readErr, html) => {
-        if (readErr) {
-          console.error("Error reading confirmation template:", readErr);
-          return res.status(500).send("Error loading confirmation page");
-        }
 
-        const renderedHtml = html
-          .replace(/{{SERVER_URL}}/g, process.env.SERVER_URL)
-
+      try {
+        const html = await fs.readFile(full_path, 'utf8');
+        const renderedHtml = html.replace(/{{SERVER_URL}}/g, process.env.SERVER_URL);
         return res.send(renderedHtml);
-      });
+      } catch (readErr) {
+        console.error("Error reading confirmation template:", readErr);
+        return res.status(500).send("Error loading confirmation page");
+      }
       return;
     }
-
 
     const currentStatus = results[0]?.member_status;
     const ownerEmail = results[0]?.owner_email;
@@ -773,17 +783,14 @@ router.get("/rejection/:member_id", (req, res) => {
     if (currentStatus === "Accepted") {
       const filePath = path.join(__dirname, "already_confirmed_template.html"); // Make sure filename is correct
 
-      return fs.readFile(filePath, "utf8", (readErr, html) => {
-        if (readErr) {
-          console.error("Error loading HTML file:", readErr);
-          return res.status(500).send("Error loading confirmation page");
-        }
-
-        const renderedHtml = html
-          .replace(/{{status}}/g, currentStatus)
-
+      try {
+        const html = await fs.readFile(filePath, "utf8");
+        const renderedHtml = html.replace(/{{status}}/g, currentStatus);
         return res.send(renderedHtml);
-      });
+      } catch (readErr) {
+        console.error("Error loading HTML file:", readErr);
+        return res.status(500).send("Error loading confirmation page");
+      }
     }
 
     // Step 2: Update to Rejected
@@ -793,43 +800,47 @@ router.get("/rejection/:member_id", (req, res) => {
       WHERE member_id = ?
     `;
 
-    db.query(updateQuery, [member_id], async (updateErr, result) => {
-      if (updateErr) {
-        console.error("Error updating to Rejected:", updateErr);
-        return res.status(500).send("Failed to reject invitation");
-      }
-
-      // Get owner name for email notification
-      const ownerQuery = "SELECT user_name FROM owner WHERE user_email = ?";
-      db.query(ownerQuery, [ownerEmail], async (ownerErr, ownerResults) => {
-        if (!ownerErr && ownerResults.length > 0) {
-          const ownerName = ownerResults[0].user_name;
-
-          // Send email notification to owner
-          await send_owner_notification_email(ownerEmail, ownerName, memberName, "Rejected");
-        } else {
-          console.error("Error fetching owner details for email:", ownerErr);
-        }
-      });
-
-      req.io.emit(`user_confirmation_updated_team_member`);
-
-      // Step 3: Load HTML template and respond
-      const filePath = path.join(__dirname, "confirmation_template.html"); // Same template file
-      fs.readFile(filePath, "utf8", (readErr, html) => {
-        if (readErr) {
-          console.error("Error loading HTML file:", readErr);
-          return res.status(500).send("Error loading confirmation page");
-        }
-
-        const renderedHtml = html
-          .replace(/{{status}}/g, "Rejected")
-          .replace(/{{message}}/g, "You've successfully rejected the invitation.");
-
-        res.send(renderedHtml);
+    await new Promise((resolve, reject) => {
+      db.query(updateQuery, [member_id], (err, result) => {
+        if (err) reject(err);
+        else resolve(result);
       });
     });
-  });
+
+    // Get owner name for email notification
+    const ownerQuery = "SELECT user_name FROM owner WHERE user_email = ?";
+    const [ownerResults] = await new Promise((resolve, reject) => {
+      db.query(ownerQuery, [ownerEmail], (err, results) => {
+        if (err) reject(err);
+        else resolve([results]);
+      });
+    });
+
+    if (ownerResults && ownerResults.length > 0) {
+      const ownerName = ownerResults[0].user_name;
+      // Send email notification to owner
+      await send_owner_notification_email(ownerEmail, ownerName, memberName, "Rejected");
+    }
+
+    req.io.emit(`user_confirmation_updated_team_member`);
+
+    // Step 3: Load HTML template and respond
+    const filePath = path.join(__dirname, "confirmation_template.html"); // Same template file
+    try {
+      const html = await fs.readFile(filePath, "utf8");
+      const renderedHtml = html
+        .replace(/{{status}}/g, "Rejected")
+        .replace(/{{message}}/g, "You've successfully rejected the invitation.");
+
+      return res.send(renderedHtml);
+    } catch (readErr) {
+      console.error("Error loading HTML file:", readErr);
+      return res.status(500).send("Error loading confirmation page");
+    }
+  } catch (error) {
+    console.error("Error in rejection route:", error);
+    return res.status(500).send("Server error");
+  }
 });
 
 
@@ -1085,7 +1096,7 @@ router.post("/add-team-members", async (req, res) => {
 
         // Add a small delay to simulate email sending process (useful for UI feedback)
         await new Promise(resolve => setTimeout(resolve, 1500));
-        
+
         // Send confirmation email
         await send_team_event_confirmation_email(
           memberData[0].team_member_email,
@@ -1199,7 +1210,7 @@ router.get("/event-confirmation/:event_id/:member_email/:action", async (req, re
         } else if (event.event_request_type === 'service') {
           event_title = event.service_name;
         } else if (event.event_request_type === 'equipment') {
-          event_title = event.event_name;
+          event_title = event.equipment_name || event.event_name;
         }
         // Replace placeholders with actual data
         const renderedHtml = template
@@ -1263,21 +1274,21 @@ router.get("/event-confirmation/:event_id/:member_email/:action", async (req, re
           "UPDATE event_request SET event_status = ? WHERE id = ?",
           [newEventStatus, event_id]
         );
-        
+
         // Get event details to notify sender if all team members have confirmed
         const [eventDetails] = await db.promise().query(
           "SELECT * FROM event_request WHERE id = ?",
           [event_id]
         );
-        
+
         if (eventDetails.length > 0 && newEventStatus === 'Accepted') {
           const eventData = eventDetails[0];
-          
+
           // Send confirmation email to the sender (client) only after all team members confirmed
           try {
             // Import the email module if needed
             const { send_event_confirmation_email } = require('../modules/send_server_email');
-            
+
             // Format the event title based on event type
             let eventTitle = '';
             if (eventData.event_request_type === 'package') {
@@ -1287,15 +1298,15 @@ router.get("/event-confirmation/:event_id/:member_email/:action", async (req, re
             } else if (eventData.event_request_type === 'service') {
               eventTitle = eventData.service_name;
             }
-            
+
             // Get owner name for the email
             const [ownerInfo] = await db.promise().query(
-              "SELECT user_name FROM owner WHERE user_email = ?", 
+              "SELECT user_name FROM owner WHERE user_email = ?",
               [eventData.receiver_email]
             );
-            
+
             const ownerName = ownerInfo.length > 0 ? ownerInfo[0].user_name : "Event Organizer";
-            
+
             // Send the confirmation email to sender
             await send_event_confirmation_email(
               eventData.sender_email,
@@ -1306,7 +1317,7 @@ router.get("/event-confirmation/:event_id/:member_email/:action", async (req, re
               eventData.location || "Location not specified",
               ownerName
             );
-            
+
             console.log(`Confirmation email sent to sender ${eventData.sender_email} after all team members confirmed`);
           } catch (emailError) {
             console.error("Error sending confirmation email to sender:", emailError);
@@ -1523,21 +1534,21 @@ router.post("/get-event-team-members", (req, res) => {
 
   // First check if the event exists
   const eventQuery = "SELECT id, assigned_team_member FROM event_request WHERE id = ?";
-  
+
   db.query(eventQuery, [event_id], (eventErr, eventResults) => {
     if (eventErr) {
       console.error("Error checking event existence:", eventErr);
       return res.status(500).json({ message: "Database error", error: eventErr });
     }
-    
+
     if (eventResults.length === 0) {
       console.log("Event not found with ID:", event_id);
       return res.status(404).json({ message: "Event not found" });
     }
-    
+
     const event = eventResults[0];
     console.log("Found event:", event);
-    
+
     // Try to parse assigned_team_member if it exists
     let assignedTeamMembers = [];
     try {
@@ -1548,7 +1559,7 @@ router.post("/get-event-team-members", (req, res) => {
         } else {
           assignedTeamMembers = event.assigned_team_member;
         }
-        
+
         if (!Array.isArray(assignedTeamMembers)) {
           assignedTeamMembers = [assignedTeamMembers];
         }
@@ -1556,50 +1567,50 @@ router.post("/get-event-team-members", (req, res) => {
     } catch (parseError) {
       console.error("Error parsing assigned_team_member:", parseError);
     }
-    
+
     // If we have assigned team members in the old format, fetch them directly
     if (assignedTeamMembers.length > 0) {
       console.log("Using legacy format for team members:", assignedTeamMembers);
-      
+
       // Query to get team member details
       const memberQuery = `
         SELECT member_id, member_name, member_profile_img, team_member_email
         FROM team_member 
         WHERE member_id IN (?)
       `;
-      
+
       db.query(memberQuery, [assignedTeamMembers], (memberErr, memberResults) => {
         if (memberErr) {
           console.error("Error fetching team member details:", memberErr);
           return res.status(500).json({ message: "Database error", error: memberErr });
         }
-        
+
         // Add a default confirmation status since it's not stored in the old format
         const resultWithStatus = memberResults.map(member => ({
           ...member,
           confirmation_status: "Accepted", // Default status
           role_in_event: "Team Member" // Default role
         }));
-        
+
         console.log("Returning legacy team members:", resultWithStatus);
         return res.json(resultWithStatus);
       });
     } else {
       // Try to fetch from the new event_team_member table
       console.log("Checking event_team_member table for event_id:", event_id);
-      
+
       // Check if event_team_member table exists
       db.query("SHOW TABLES LIKE 'event_team_member'", (tableErr, tableResults) => {
         if (tableErr) {
           console.error("Error checking table existence:", tableErr);
           return res.status(500).json({ message: "Database error", error: tableErr });
         }
-        
+
         if (tableResults.length === 0) {
           console.log("event_team_member table doesn't exist, returning empty array");
           return res.json([]);
         }
-        
+
         // Table exists, query from it
         const query = `
           SELECT etm.member_id, etm.confirmation_status, etm.role_in_event,
@@ -1608,13 +1619,13 @@ router.post("/get-event-team-members", (req, res) => {
           JOIN team_member tm ON etm.member_id = tm.member_id
           WHERE etm.event_id = ?
         `;
-        
+
         db.query(query, [event_id], (err, results) => {
           if (err) {
             console.error("Error fetching event team members:", err);
             return res.status(500).json({ message: "Failed to fetch team members", error: err });
           }
-          
+
           console.log("Successfully fetched team members from event_team_member table:", results);
           res.json(results);
         });
@@ -1626,14 +1637,14 @@ router.post("/get-event-team-members", (req, res) => {
 // Route to check for events that have ended and update their status
 router.get("/check-past-events/:user_email", async (req, res) => {
   const { user_email } = req.params;
-  
+
   if (!user_email) {
     return res.status(400).json({ error: "User email is required" });
   }
 
   try {
     const now = new Date();
-    
+
     // Find events where:
     // 1. The user is the receiver
     // 2. End date has passed
@@ -1651,19 +1662,19 @@ router.get("/check-past-events/:user_email", async (req, res) => {
         AND end_date < ?
         AND event_status NOT IN ('Completed', 'Event Expired', 'Rejected')
     `;
-    
+
     const [result] = await db.promise().query(query, [user_email, now]);
-    
+
     // Check if any rows were affected
     const updated = result.affectedRows > 0;
-    
+
     // If any events were updated, emit a socket event
     if (updated) {
       req.io.emit(`event-status-update-${user_email}`);
     }
-    
+
     return res.json({ updated, count: result.affectedRows });
-    
+
   } catch (error) {
     console.error("Error checking past events:", error);
     return res.status(500).json({ error: "Database error", details: error.message });

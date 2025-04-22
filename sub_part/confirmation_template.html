@@ -95,7 +95,7 @@
         status === "AlreadyProcessed";
       const container = document.getElementById("status-container");
 
-      if (status === "Confirmed") {
+      if (status === "Accepted") {
         container.innerHTML = `
         <div class="logo">
           <svg xmlns="http://www.w3.org/2000/svg" width="120" height="30" viewBox="0 0 120 30">
@@ -168,7 +168,7 @@
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
           </svg>
         </div>
-        <h1>Invitation Pending</h1>
+        <h1>Invitation Not Processed</h1>
         <div class="status pending">Awaiting Response</div>
         <p>Your team invitation is still pending a response. Please click the confirmation or rejection link in your invitation email to complete the process.</p>
         <p>If you need a new invitation link or have any questions, please contact your team administrator.</p>
