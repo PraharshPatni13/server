@@ -457,45 +457,12 @@ router.get('/files', (req, res) => {
             }
 
             if (rootFolders.length === 0) {
-                // Create a root folder if none exists
-                const rootName = 'My Drive';
-                const insertQuery = `INSERT INTO drive_folders 
-                                   (folder_name, user_email, is_root, created_by, modified_by, is_shared)
-                                   VALUES (?, ?, true, ?, ?, false)`;
-
-                db.query(insertQuery, [rootName, user_email, user_email, user_email], (err, result) => {
-                    if (err) {
-                        return res.status(500).send('Error creating root folder: ' + err.message);
-                    }
-
-                    const newRootId = result.insertId;
-
-                    // Create physical folder
-                    const folderPath = path.join(getUserFolderPath(user_email), rootName);
-                    ensureFolder(folderPath);
-
-                    // Now get files for this new root folder (there will be none initially)
-                    return res.status(200).json({
-                        files: [],
-                        folders: [{
-                            folder_id: newRootId,
-                            folder_name: rootName,
-                            user_email: user_email,
-                            is_root: true,
-                            created_by: user_email,
-                            modified_by: user_email,
-                            is_shared: false,
-                            created_date: new Date(),
-                            modified_date: new Date()
-                        }],
-                        current_folder: {
-                            folder_id: newRootId,
-                            folder_name: rootName,
-                            is_root: true
-                        }
-                    });
+                // Return empty results instead of creating "My Drive"
+                return res.status(200).json({
+                    files: [],
+                    folders: [],
+                    current_folder: null
                 });
-                return;
             }
 
             // Use the first root folder found
