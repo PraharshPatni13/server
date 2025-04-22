@@ -358,13 +358,56 @@ function deleteFolderFromDB(folder_id, user_email, res) {
 
 // Upload file - using direct file handling
 router.post('/upload-file', (req, res) => {
-    const { file_name, file_data, file_size, file_type, parent_folder_id, is_shared, created_by, modified_by } = req.body;
+    const { file_name, file_data, file_size, file_type, parent_folder_id, is_shared, created_by, modified_by, is_root } = req.body;
     const { user_email } = req.query;
 
     // Validate input
-    if (!file_name || !file_data || !parent_folder_id || !created_by || !user_email) {
+    if (!file_name || !file_data || !created_by || !user_email) {
+        console.log(req.body);
         return res.status(400).send('Missing required fields');
     }
+
+    // Handle root uploads differently from folder uploads
+    if (is_root === true) {
+        // Find a root folder for this user or use parent_folder_id if provided
+        const rootQuery = `SELECT folder_id, folder_name FROM drive_folders 
+                        WHERE user_email = ? AND is_root = true LIMIT 1`;
+
+        db.query(rootQuery, [user_email], (err, rootFolders) => {
+            if (err) {
+                return res.status(500).send('Error finding root folder: ' + err.message);
+            }
+
+            let folderId = parent_folder_id;
+
+            // If parent_folder_id not provided, use the root folder if one exists
+            if (!parent_folder_id) {
+                if (rootFolders.length === 0) {
+                    return res.status(404).send('No root folder found for this user');
+                }
+                folderId = rootFolders[0].folder_id;
+            }
+
+            // Continue with file upload using the determined folder ID
+            handleFileUpload(file_name, file_data, file_size, file_type, folderId,
+                is_shared, created_by, modified_by, user_email, res);
+        });
+    } else {
+        // Regular folder upload - parent_folder_id is required
+        if (!parent_folder_id) {
+            console.log(req.body);
+            return res.status(400).send('Missing parent_folder_id for non-root upload');
+        }
+
+        // Process file upload
+        handleFileUpload(file_name, file_data, file_size, file_type, parent_folder_id,
+            is_shared, created_by, modified_by, user_email, res);
+    }
+});
+
+// Helper function to handle the file upload process
+function handleFileUpload(file_name, file_data, file_size, file_type, parent_folder_id,
+    is_shared, created_by, modified_by, user_email, res) {
 
     // Check folder permissions
     const permCheck = `SELECT * FROM drive_folders 
@@ -400,15 +443,14 @@ router.post('/upload-file', (req, res) => {
 
                 // Save file metadata to database (without storing file_data in DB)
                 const insertQuery = `INSERT INTO drive_files 
-                                   (file_name, file_size, file_type, parent_folder_id, file_path, is_shared, created_by, modified_by) 
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+                                   (file_name, file_size, file_type, parent_folder_id, is_shared, created_by, modified_by) 
+                                   VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
                 db.query(insertQuery, [
                     file_name,
                     actualSize || file_size,
                     file_type,
                     parent_folder_id,
-                    destPath,
                     is_shared || false,
                     created_by,
                     modified_by || created_by
@@ -434,7 +476,7 @@ router.post('/upload-file', (req, res) => {
                 res.status(500).send('Error saving file: ' + error.message);
             });
     });
-});
+}
 
 // Get files with modified parameter handling
 router.get('/files', (req, res) => {
@@ -1261,15 +1303,14 @@ router.post('/upload', (req, res) => {
 
                 // Save file metadata to database (without storing file_data in DB)
                 const insertQuery = `INSERT INTO drive_files 
-                                   (file_name, file_size, file_type, parent_folder_id, file_path, is_shared, created_by, modified_by) 
-                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+                                   (file_name, file_size, file_type, parent_folder_id, is_shared, created_by, modified_by) 
+                                   VALUES (?, ?, ?, ?, ?, ?, ?)`;
 
                 db.query(insertQuery, [
                     file_name,
                     actualSize || file_size,
                     file_type,
                     parent_folder_id,
-                    destPath,
                     is_shared || false,
                     created_by,
                     modified_by || created_by
