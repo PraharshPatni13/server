@@ -43,11 +43,9 @@ router.post("/get_all_notifications", (req, res) => {
   if (!email) {
     return res.status(400).json({ error: "user_email is required" })
   }
-  console.log("after verifying the email")
   const query = "SELECT * FROM notifications_pes WHERE user_email=? and is_seen= 1 ORDER BY id DESC"
   db.query(query, [email], (err, result) => {
 
-    console.log("notifications data", result)
     if (err) {
       console.error("Error executing query:", err);
       return res.status(500).json({ error: "Database error" });
