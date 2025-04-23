@@ -2625,11 +2625,7 @@ router.get("/get-profile-image/:user_email", (req, res) => {
   });
 });
 
-// router.get("/fetch_profile_in_equipment/:sender_email",(req,res)=>{
-//   const {sender_email} = req.params;
 
-//   const query = ""
-// })
 router.get("/fetch_profile_in_equipment/:sender_email", (req, res) => {
   const { sender_email } = req.params;
 

@@ -15,7 +15,7 @@ const ownerRoutes = require('./sub_part/owner_rout');
 const ownerRoutes_v2 = require('./sub_part/owner_rout_v2');
 const chartRoutes = require('./sub_part/chart_rout');
 const reviews_rout = require('./sub_part/reviews_rout');
-
+const starred_route = require('./sub_part/starred_routes');
 const calendarRoutes = require('./sub_part/calendar_rout');
 
 // @shrey11_  start ---- 
@@ -156,6 +156,9 @@ app.use('/team_members', team_members);
 // reviews routes
 app.use('/reviews', reviews_rout);
 
+//starred routes
+app.use('/starred', starred_route);
+
 // calendar routes
 app.use('/calendar', calendarRoutes);
 
@@ -257,7 +260,7 @@ app.use("/", praharsh_routes);
 
 app.get('/get_img_for_html_url', (req, res) => {
   const imagePath = "sub_part/Images/WebsiteLogo/logoWithNameBlue.png"
-    const fullPath = path.join(__dirname, imagePath);
+  const fullPath = path.join(__dirname, imagePath);
   res.sendFile(fullPath);
 });
 
