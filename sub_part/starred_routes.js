@@ -42,33 +42,33 @@ router.put('/drive/:type/:id', async (req, res) => {
     }
 });
 
-router.get('/drive/starred', async (req, res) => {
-    const { user_email } = req.query;
+// router.get('/drive/starred', async (req, res) => {
+//     const { user_email } = req.query;
 
-    if (!user_email) {
-        return res.status(400).json({ error: 'Missing user_email in query' });
-    }
+//     if (!user_email) {
+//         return res.status(400).json({ error: 'Missing user_email in query' });
+//     }
 
-    try {
-        const [results] = await db.query(`
-            SELECT 
-                id,
-                item_name AS name,
-                type,
-                file_type,
-                size,
-                created_at,
-                starred_at
-            FROM drive_files
-            WHERE is_starred = 1
-        `);
+//     try {
+//         const [results] = await db.query(`
+//             SELECT 
+//                 id,
+//                 item_name AS name,
+//                 type,
+//                 file_type,
+//                 size,
+//                 created_at,
+//                 starred_at
+//             FROM drive_files
+//             WHERE is_starred = 1
+//         `);
 
-        res.json(results);
-    } catch (error) {
-        console.error('Error fetching starred items:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
-});
+//         res.json(results);
+//     } catch (error) {
+//         console.error('Error fetching starred items:', error);
+//         res.status(500).json({ error: 'Internal server error' });
+//     }
+// });
 
 
 module.exports = router;
