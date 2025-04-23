@@ -494,7 +494,9 @@ router.post("/invite_member", async (req, res) => {
 
       const member_id = insertResult.insertId;
 
-      const invitationLink = `${process.env.SERVER_URL}/team_members/accept-invitation/${member_id}`;
+      const accept_route = `${process.env.SERVER_URL}/team_members/confirmation/${member_id}`
+      const reject_route = `${process.env.SERVER_URL}/team_members/rejection/${member_id}`
+      // const invitationLink = `${process.env.SERVER_URL}/team_members/accept-invitation/${member_id}`;
 
       // Step 5: Send the invitation email
       const emailSent = await send_team_invitation_email(
@@ -503,8 +505,9 @@ router.post("/invite_member", async (req, res) => {
         ownerName,
         businessName,
         member_role,
-        invitationLink,
-        member_id
+        accept_route,
+        reject_route
+        // member_id
       );
 
       if (!emailSent) {

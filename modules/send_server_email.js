@@ -81,8 +81,8 @@ async function send_event_confirmation_email(email, event_name, event_date, even
     }
 }
 
-async function send_team_invitation_email(member_email, member_name, owner_name, business_name, member_role, invitationLink) {
-    console.log("invitationLink", member_email, "  ", member_name, "  ", owner_name, "  ", business_name, "  ", member_role, "  ", invitationLink);
+async function send_team_invitation_email(member_email, member_name, owner_name, business_name, member_role, accept_route, reject_route) {
+    console.log("invitationLink", member_email, "  ", member_name, "  ", owner_name, "  ", business_name, "  ", member_role, "  ", accept_route, "  ", reject_route);
     try {
         // Load the invitation template
         let template;
@@ -97,10 +97,12 @@ async function send_team_invitation_email(member_email, member_name, owner_name,
                     <p>{{owner_name}} has invited you to join their team as a "{{member_role}}".</p>
                     <p>Click the button below to accept this invitation:</p>
                     <div style="text-align: center; margin: 25px 0;">
-                        <a href="{{invitation_link}}" style="display: inline-block; padding: 10px 20px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
+                        <a href="{{accept_route}}" style="display: inline-block; padding: 10px 20px; background-color: #4f46e5; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
                             Accept Invitation
                         </a>
-                        <p>{{invitation_link}}</p>
+                        <a href="{{reject_route}}" style="display: inline-block; padding: 10px 20px; background-color: #EF4444; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
+                            Decline
+                        </a>
                     </div>
                     <p style="color: #666; font-size: 14px;">If you did not expect this invitation, you can safely ignore this email.</p>
                 </div>
@@ -114,7 +116,9 @@ async function send_team_invitation_email(member_email, member_name, owner_name,
             .replace(/{{member_name}}/g, member_name)
             .replace(/{{owner_name}}/g, owner_name)
             .replace(/{{member_role}}/g, member_role)
-            .replace(/{{invitation_link}}/g, invitationLink);
+            .replace(/{{accept_route}}/g, accept_route)
+            .replace(/{{reject_route}}/g, reject_route)
+            .replace(/{{owner}}/g, member_email);
 
         console.log("sending email on the route")
 
