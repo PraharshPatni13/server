@@ -17,6 +17,7 @@ const chartRoutes = require('./sub_part/chart_rout');
 const reviews_rout = require('./sub_part/reviews_rout');
 const starred_route = require('./sub_part/starred_routes');
 const calendarRoutes = require('./sub_part/calendar_rout');
+const fileRoutesForPreview = require('./sub_part/fileRoutesForPreview');
 
 // @shrey11_  start ---- 
 // @shrey11_  start ---- 
@@ -161,6 +162,9 @@ app.use('/starred', starred_route);
 
 // calendar routes
 app.use('/calendar', calendarRoutes);
+
+// file routes for preview
+app.use('/file_preview', fileRoutesForPreview);
 
 
 
