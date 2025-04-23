@@ -23,7 +23,7 @@ router.put('/drive/:type/:id', async (req, res) => {
     }
 
     const tableName = type === 'files' ? 'drive_files' : 'drive_folders';
-    const idColumn = type === 'files' ? 'photo_id' : 'folder_id';
+    const idColumn = type === 'files' ? 'file_id' : 'folder_id';
 
     try {
         const query = `
