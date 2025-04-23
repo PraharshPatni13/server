@@ -11,12 +11,10 @@ require('dotenv').config();
 
 // Define root directory for file storage - make it absolute to avoid path issues
 const rootDirectory = path.join(__dirname, "..", "root");
-console.log("Root directory for storage:", rootDirectory);
 
 
 // Create root directory if it doesn't exist
 if (!fs.existsSync(rootDirectory)) {
-    console.log("Creating root directory:", rootDirectory);
     fs.mkdirSync(rootDirectory, { recursive: true });
 }
 
@@ -27,21 +25,11 @@ const db = mysql.createConnection({
     database: process.env.DB_NAME,
     authPlugins: {},
   });
-// Add error handling for database connection
-db.connect(err => {
-    if (err) {
-        console.error('Database connection error:', err);
-    } else {
-        console.log('Connected to database');
-    }
-});
-
 
 // Helper function to ensure a folder exists on the filesystem
 function ensureFolder(folderPath) {
     try {
         if (!fs.existsSync(folderPath)) {
-            console.log(`Creating directory: ${folderPath}`);
             fs.mkdirSync(folderPath, { recursive: true });
         }
         return folderPath;
@@ -61,8 +49,6 @@ function getUserFolderPath(userEmail, isDrive = true) {
     } else {
         finalPath = userFolder;
     }
-
-    console.log(`Creating folder path: ${finalPath} for user: ${userEmail}`);
     return ensureFolder(finalPath);
 }
 
@@ -85,14 +71,11 @@ router.post('/create-folder', (req, res) => {
         return res.status(400).send('Missing required fields');
     }
 
-    console.log(`Creating folder: ${folder_name} for user: ${created_by}`);
-
     // First, ensure user's root directory exists
     const userBasePath = getUserFolderPath(created_by, false);
     const userDrivePath = path.join(userBasePath, "drive");
     try {
         ensureFolder(userDrivePath);
-        console.log(`Ensured drive directory exists at: ${userDrivePath}`);
     } catch (error) {
         console.error(`Error ensuring drive directory: ${error.message}`);
         return res.status(500).send('Error ensuring drive directory: ' + error.message);
@@ -110,8 +93,6 @@ router.post('/create-folder', (req, res) => {
         
         // Create the folder
         ensureFolder(folderPath);
-        console.log(`Creating directory: ${folderPath}`);
-        console.log(`Physical folder created at: ${folderPath}`);
         
         // Also create a database entry for compatibility
         const query = `INSERT INTO drive_folders (folder_name, created_by, is_root, modified_by, is_shared, user_email)
@@ -134,7 +115,6 @@ router.post('/create-folder', (req, res) => {
             }
 
             const folder_id = result.insertId;
-            console.log(`Created folder in database with ID: ${folder_id}, name: ${folder_name}`);
             
             // Return success
             return res.status(201).send({
@@ -180,7 +160,6 @@ router.get('/get_all_files_and_folders/:created_by', (req, res) => {
         return res.status(400).json({ error: 'User email is required' });
     }
 
-    console.log(`Fetching all files and folders for user: ${created_by}`);
 
     // Get files from database
     const query_files = `SELECT * FROM drive_files WHERE created_by = ? OR user_email = ?`;
@@ -196,8 +175,6 @@ router.get('/get_all_files_and_folders/:created_by', (req, res) => {
             });
         }
         
-        console.log(`Retrieved ${files.length} files from database`);
-        
         // Get folders from database
         const query_folders = `SELECT * FROM drive_folders WHERE created_by = ? OR user_email = ?`;
         
@@ -212,7 +189,6 @@ router.get('/get_all_files_and_folders/:created_by', (req, res) => {
                 });
             }
             
-            console.log(`Retrieved ${folders.length} folders from database`);
             
             // Return both files and folders from database
             res.status(200).json({
@@ -321,8 +297,6 @@ router.delete('/folders/:id', (req, res) => {
     const { created_by, user_email } = req.query;
     const email = user_email || created_by;
 
-    console.log(`Request to delete folder ID: ${folder_id} from user: ${created_by}`);
-
     // Validate input
     if (!created_by) {
         console.error("Missing created_by parameter");
@@ -339,16 +313,13 @@ router.delete('/folders/:id', (req, res) => {
         }
         
         if (folderResults.length === 0) {
-            console.log(`Folder ${folder_id} not found in database`);
             return res.status(404).send('Folder not found');
         }
         
         const folder = folderResults[0];
-        console.log(`Found folder: ${folder.folder_name} (ID: ${folder.folder_id})`);
         
         // Check if user is the folder creator or associated with it
         if (folder.created_by === created_by || folder.user_email === email) {
-            console.log(`User is direct owner of the folder`);
             proceedWithFolderDelete();
             return;
         }
@@ -366,7 +337,6 @@ router.delete('/folders/:id', (req, res) => {
             }
             
             if (accessResults.length > 0) {
-                console.log(`User has folder access permission`);
                 proceedWithFolderDelete();
                 return;
             }
@@ -378,8 +348,6 @@ router.delete('/folders/:id', (req, res) => {
         
         // Function to proceed with folder deletion after permission checks
         function proceedWithFolderDelete() {
-            console.log(`Preparing to delete folder: ${folder.folder_name} (ID: ${folder.folder_id})`);
-            
             // Get folder path
             const userFolder = getUserFolderPath(folder.created_by || folder.user_email);
             const folderPath = path.join(userFolder, folder.folder_name);
@@ -387,14 +355,9 @@ router.delete('/folders/:id', (req, res) => {
             // Delete physical folder
             try {
                 if (fs.existsSync(folderPath)) {
-                    console.log(`Deleting physical folder at: ${folderPath}`);
                     deleteFolderContents(folderPath);
-                    // Delete the folder itself
                     fs.rmdirSync(folderPath);
-                    console.log(`Physical folder deleted: ${folderPath}`);
-                } else {
-                    console.log(`Folder not found at expected path: ${folderPath}`);
-                }
+                } 
             } catch (error) {
                 console.error("Error deleting physical folder:", error);
                 // Continue with database deletion even if physical delete fails
@@ -425,23 +388,17 @@ function deleteFolderContents(folderPath) {
 
 // Helper function to delete folder from database
 function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
-    console.log(`Deleting folder ID ${folder_id} from database`);
     
     // Delete folder access records
     db.query('DELETE FROM drive_folder_access WHERE folder_id = ?', [folder_id], (err, result) => {
         if (err) {
             console.error("Error deleting folder access:", err);
-        } else {
-            console.log(`Folder access records deleted. Affected rows: ${result.affectedRows}`);
         }
-
         // Delete folder structure records
         db.query('DELETE FROM drive_folder_structure WHERE parent_folder_id = ? OR child_folder_id = ?',
             [folder_id, folder_id], (err, result) => {
                 if (err) {
                     console.error("Error deleting folder structure:", err);
-                } else {
-                    console.log(`Folder structure records deleted. Affected rows: ${result.affectedRows}`);
                 }
 
                 // Delete files in this folder from database
@@ -449,18 +406,14 @@ function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
                     if (err) {
                         console.error("Error finding files in folder:", err);
                     } else {
-                        console.log(`Found ${files.length} files in folder to delete`);
                         
                         // Delete file access records for all files in folder
                         if (files.length > 0) {
                             const fileIds = files.map(file => file.file_id);
-                            console.log(`Deleting access records for files: ${fileIds.join(', ')}`);
                             
                             db.query('DELETE FROM drive_file_access WHERE file_id IN (?)', [fileIds], (err, result) => {
                                 if (err) {
                                     console.error("Error deleting file access:", err);
-                                } else {
-                                    console.log(`File access records deleted. Affected rows: ${result.affectedRows}`);
                                 }
                             });
                         }
@@ -470,8 +423,6 @@ function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
                     db.query('DELETE FROM drive_files WHERE parent_folder_id = ?', [folder_id], (err, result) => {
                         if (err) {
                             console.error("Error deleting files:", err);
-                        } else {
-                            console.log(`Files deleted from database. Affected rows: ${result.affectedRows}`);
                         }
 
                         // Finally delete the folder record
@@ -481,9 +432,7 @@ function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
                                 console.error(`Error deleting folder ${folder_id} from database:`, err);
                                 return res.status(500).send('Error deleting folder: ' + err.message);
                             }
-
-                            console.log(`Folder record deleted. Affected rows: ${result.affectedRows}`);
-                            res.status(200).send({
+                             res.status(200).send({
                                 message: 'Folder deleted successfully',
                                 affected: result.affectedRows,
                                 folder_id: folder_id,
@@ -498,7 +447,6 @@ function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
 
 // Replace the upload-file route to work with physical file system directly
 router.post('/upload-file', (req, res) => {
-    console.log("Upload request received");
     
     const created_by = req.query.created_by;
     const user_email = req.query.user_email || created_by; // Use created_by as fallback
@@ -515,7 +463,6 @@ router.post('/upload-file', (req, res) => {
     try {
         // Ensure the drive folder exists
         ensureFolder(drivePath);
-        console.log(`Ensured user drive folder exists at: ${drivePath}`);
         
         // Process the upload directly
         const bb = busboy({ 
@@ -530,8 +477,6 @@ router.post('/upload-file', (req, res) => {
         
         bb.on('file', (name, file, info) => {
             const { filename, encoding, mimeType } = info;
-            console.log(`Received file [${name}]: filename=${filename}, encoding=${encoding}, mimeType=${mimeType}`);
-            
             const file_name = filename;
             const file_type = path.extname(file_name).slice(1);
             const modified_by = created_by;
@@ -547,13 +492,11 @@ router.post('/upload-file', (req, res) => {
                 
                 file.on('close', async () => {
                     const file_size = fileSize / (1024 * 1024); // Convert to MB
-                    console.log(`File [${file_name}] finished, size=${file_size}MB`);
                     
                     try {
                         // Generate a unique filename to avoid collisions
                         const uniqueFileName = generateUniqueFilename(file_name);
                         const destPath = path.join(drivePath, uniqueFileName);
-                        console.log(`Saving file directly to: ${destPath}`);
                         
                         // Write the file to disk
                         fs.writeFile(destPath, Buffer.concat(chunks), (err) => {
@@ -563,7 +506,6 @@ router.post('/upload-file', (req, res) => {
                                 return;
                             }
                             
-                            console.log("File saved successfully to disk:", destPath);
                             
                             // Get actual file size on disk
                             const stats = fs.statSync(destPath);
@@ -599,8 +541,6 @@ router.post('/upload-file', (req, res) => {
                                 }
                                 
                                 const fileId = result.insertId;
-                                console.log(`File upload complete, database updated with ID: ${fileId}`);
-                                
                                 const response = {
                                     message: 'File uploaded successfully',
                                     file_id: fileId,
@@ -634,7 +574,6 @@ router.post('/upload-file', (req, res) => {
         });
         
         bb.on('finish', async () => {
-            console.log("Finished parsing form");
             if (filesUploaded === 0) {
                 return res.status(400).send('No files were uploaded');
             }
@@ -912,7 +851,6 @@ router.delete('/files/:id', (req, res) => {
     const { created_by, user_email } = req.query;
     const email = user_email || created_by;
 
-    console.log(`Request to delete file ID: ${file_id} from user: ${created_by}`);
 
     // Validate input
     if (!created_by) {
@@ -930,12 +868,10 @@ router.delete('/files/:id', (req, res) => {
         }
         
         if (fileResults.length === 0) {
-            console.log(`File ${file_id} not found in database`);
             return res.status(404).send('File not found');
         }
         
         const fileData = fileResults[0];
-        console.log(`Found file: ${fileData.file_name} (ID: ${fileData.file_id})`);
         
         // Simplified permission check - just check if the user created the file
         if (fileData.created_by !== created_by && fileData.user_email !== email) {
@@ -947,14 +883,11 @@ router.delete('/files/:id', (req, res) => {
         if (fileData.file_path && fs.existsSync(fileData.file_path)) {
             try {
                 fs.unlinkSync(fileData.file_path);
-                console.log(`Physical file deleted: ${fileData.file_path}`);
             } catch (error) {
                 console.error(`Error deleting physical file ${fileData.file_path}:`, error);
                 // Continue with database deletion even if physical delete fails
             }
-        } else {
-            console.log(`Physical file not found at path: ${fileData.file_path}`);
-        }
+        } 
 
         // Delete file record from database
         const deleteQuery = `DELETE FROM drive_files WHERE file_id = ?`;
@@ -965,8 +898,6 @@ router.delete('/files/:id', (req, res) => {
                 return res.status(500).send('Error deleting file: ' + err.message);
             }
 
-            console.log(`File ${file_id} deleted successfully from database. Affected rows: ${result.affectedRows}`);
-            
             res.status(200).send({
                 message: 'File deleted successfully',
                 affected: result.affectedRows,
