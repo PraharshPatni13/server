@@ -230,10 +230,11 @@ router.get('/folders/:id', (req, res) => {
 router.put('/folders/:id', (req, res) => {
     const folder_id = req.params.id;
     const { folder_name, is_shared, modified_by } = req.body;
-    const { created_by } = req.query;
+    const { created_by, user_email } = req.query;
+    const email = user_email || created_by;
 
     // Validate input
-    if (!folder_name || !modified_by || !created_by) {
+    if (!folder_name || !modified_by) {
         return res.status(400).send('Missing required fields');
     }
 
@@ -245,47 +246,59 @@ router.put('/folders/:id', (req, res) => {
 
     db.query(permCheck, [folder_id, created_by, created_by], (err, results) => {
         if (err) {
+            console.error("Error checking permissions:", err);
             return res.status(500).send('Error checking permissions: ' + err.message);
         }
 
         if (results.length === 0) {
+            console.error(`No permission to update folder ${folder_id} or folder not found`);
             return res.status(403).send('No permission to update this folder');
         }
 
         const currentFolder = results[0];
+        console.log("Current folder data:", currentFolder);
+        console.log(`Renaming folder from "${currentFolder.folder_name}" to "${folder_name}"`);
 
         // Update database record
         const updateQuery = `UPDATE drive_folders 
                            SET folder_name = ?, is_shared = ?, modified_by = ? 
                            WHERE folder_id = ?`;
 
-        db.query(updateQuery, [folder_name, is_shared, modified_by, folder_id], (err, result) => {
+        db.query(updateQuery, [folder_name, is_shared || currentFolder.is_shared, modified_by, folder_id], (err, result) => {
             if (err) {
+                console.error("Error updating folder in database:", err);
                 return res.status(500).send('Error updating folder: ' + err.message);
             }
 
             // If folder name changed, rename the physical folder
             if (folder_name !== currentFolder.folder_name) {
-                // Get parent folder path
-                const userFolder = getUserFolderPath(currentFolder.created_by);
+                // Get user's drive path
+                const userFolder = getUserFolderPath(email || currentFolder.created_by || currentFolder.user_email);
                 const oldFolderPath = path.join(userFolder, currentFolder.folder_name);
                 const newFolderPath = path.join(userFolder, folder_name);
+
+                console.log(`Attempting to rename folder from "${oldFolderPath}" to "${newFolderPath}"`);
 
                 try {
                     if (fs.existsSync(oldFolderPath)) {
                         fs.renameSync(oldFolderPath, newFolderPath);
+                        console.log(`Successfully renamed folder on filesystem`);
                     } else {
                         // Create new folder if old one doesn't exist
+                        console.log(`Old folder path not found, creating new folder: ${newFolderPath}`);
                         ensureFolder(newFolderPath);
                     }
                 } catch (error) {
+                    console.error(`Error renaming physical folder: ${error.message}`);
                     return res.status(500).send('Error renaming physical folder: ' + error.message);
                 }
             }
 
             res.status(200).send({
                 message: 'Folder updated successfully',
-                affected: result.affectedRows
+                affected: result.affectedRows,
+                folder_id: folder_id,
+                folder_name: folder_name
             });
         });
     });
@@ -766,33 +779,36 @@ router.get('/files/:id', (req, res) => {
 router.put('/files/:id', (req, res) => {
     const file_id = req.params.id;
     const { file_name, file_data, is_shared, modified_by } = req.body;
-    const { created_by } = req.query;
+    const { created_by, user_email } = req.query;
+    const email = user_email || created_by;
 
     // Validate input
-    if (!file_name || !modified_by || !created_by) {
+    if (!file_name || !modified_by) {
         return res.status(400).send('Missing required fields');
     }
 
+    console.log(`Updating file ${file_id} to name "${file_name}"`);
+
     // Check permissions and get current file data
-    const permCheck = `SELECT f.*, fold.folder_name, fold.created_by AS folder_owner 
+    const permCheck = `SELECT f.*, f.created_by AS file_owner, f.user_email AS file_user_email, f.file_path
                       FROM drive_files f
-                      JOIN drive_folders fold ON f.parent_folder_id = fold.folder_id
-                      WHERE f.file_id = ? AND (fold.created_by = ? OR fold.folder_id IN 
-                      (SELECT folder_id FROM drive_folder_access 
-                       WHERE created_by = ? AND permission IN ('WRITE', 'FULL')) OR
+                      WHERE f.file_id = ? AND (f.created_by = ? OR f.user_email = ? OR
                       f.file_id IN (SELECT file_id FROM drive_file_access 
                                   WHERE created_by = ? AND permission IN ('WRITE', 'FULL')))`;
 
-    db.query(permCheck, [file_id, created_by, created_by, created_by], (err, results) => {
+    db.query(permCheck, [file_id, created_by, email, created_by], (err, results) => {
         if (err) {
+            console.error("Error checking permissions:", err);
             return res.status(500).send('Error checking permissions: ' + err.message);
         }
 
         if (results.length === 0) {
-            return res.status(403).send('No permission to update this file');
+            console.error(`No permission to update file ${file_id} or file not found`);
+            return res.status(403).send('No permission to update this file or file not found');
         }
 
         const fileData = results[0];
+        console.log("Current file data:", fileData);
         const updateFileContent = file_data && file_data.length > 0;
 
         // If file content is provided, update the physical file
@@ -809,37 +825,48 @@ router.put('/files/:id', (req, res) => {
                            SET file_name = ?, is_shared = ?, modified_by = ? 
                            WHERE file_id = ?`;
 
-        db.query(updateQuery, [file_name, is_shared, modified_by, file_id], (err, result) => {
+        db.query(updateQuery, [file_name, is_shared || fileData.is_shared, modified_by, file_id], (err, result) => {
             if (err) {
+                console.error("Error updating file in database:", err);
                 return res.status(500).send('Error updating file: ' + err.message);
             }
 
             // If file_name changed and we have a file_path, rename the physical file
-            if (file_name !== fileData.file_name && fileData.file_path && fs.existsSync(fileData.file_path)) {
-                const dir = path.dirname(fileData.file_path);
-                const fileExt = path.extname(fileData.file_path);
-                const uniqueFileName = generateUniqueFilename(file_name);
-                const newPath = path.join(dir, uniqueFileName);
+            if (file_name !== fileData.file_name && fileData.file_path) {
+                // Check if the file exists
+                if (fs.existsSync(fileData.file_path)) {
+                    const dir = path.dirname(fileData.file_path);
+                    const fileExt = path.extname(fileData.file_path);
+                    const newFileName = file_name + fileExt;
+                    const newPath = path.join(dir, newFileName);
 
-                try {
-                    fs.renameSync(fileData.file_path, newPath);
+                    console.log(`Attempting to rename file from "${fileData.file_path}" to "${newPath}"`);
 
-                    // Update the file path in database
-                    db.query('UPDATE drive_files SET file_path = ? WHERE file_id = ?',
-                        [newPath, file_id], (err) => {
-                            if (err) {
-                                console.error('Error updating file path:', err);
-                            }
-                        });
-                } catch (error) {
-                    console.error('Error renaming file:', error);
-                    // Continue anyway as metadata was updated
+                    try {
+                        fs.renameSync(fileData.file_path, newPath);
+                        console.log(`Successfully renamed file on filesystem`);
+
+                        // Update the file path in database
+                        db.query('UPDATE drive_files SET file_path = ? WHERE file_id = ?',
+                            [newPath, file_id], (err) => {
+                                if (err) {
+                                    console.error('Error updating file path in database:', err);
+                                }
+                            });
+                    } catch (error) {
+                        console.error('Error renaming file on filesystem:', error);
+                        // Continue anyway as metadata was updated
+                    }
+                } else {
+                    console.log(`File ${fileData.file_path} not found on filesystem, only updating database`);
                 }
             }
 
             res.status(200).send({
                 message: 'File updated successfully',
-                affected: result.affectedRows
+                affected: result.affectedRows,
+                file_id: file_id,
+                file_name: file_name
             });
         });
     });
