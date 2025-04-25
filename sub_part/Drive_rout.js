@@ -24,7 +24,7 @@ const db = mysql.createConnection({
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     authPlugins: {},
-  });
+});
 
 // Helper function to ensure a folder exists on the filesystem
 function ensureFolder(folderPath) {
@@ -62,9 +62,80 @@ function generateUniqueFilename(originalName) {
 }
 
 // Create folder function - simplified
+// router.post('/create-folder', (req, res) => {
+//     const { folder_name, created_by, modified_by, user_email, parent_folder_id } = req.body;
+//     const email = user_email || created_by;
+
+//     console.log("Parent folder id", parent_folder_id);
+//     // Validate input
+//     if (!folder_name || !created_by) {
+//         return res.status(400).send('Missing required fields');
+//     }
+
+//     // First, ensure user's root directory exists
+//     const userBasePath = getUserFolderPath(created_by, false);
+//     const userDrivePath = path.join(userBasePath, "drive");
+//     try {
+//         ensureFolder(userDrivePath);
+//     } catch (error) {
+//         console.error(`Error ensuring drive directory: ${error.message}`);
+//         return res.status(500).send('Error ensuring drive directory: ' + error.message);
+//     }
+
+//     // Create physical folder on server
+//     const folderPath = path.join(userDrivePath, folder_name);
+
+//     try {
+//         // Check if folder already exists
+//         if (fs.existsSync(folderPath)) {
+//             console.error(`Folder already exists: ${folderPath}`);
+//             return res.status(400).send('Folder with this name already exists');
+//         }
+
+//         // Create the folder
+//         ensureFolder(folderPath);
+
+//         // Also create a database entry for compatibility
+//         const query = `INSERT INTO drive_folders (folder_name, created_by, is_root, modified_by, is_shared, user_email)
+//                       VALUES (?, ?, true, ?, false, ?)`;
+
+//         db.query(query, [folder_name, created_by, modified_by || created_by, email], (err, result) => {
+//             if (err) {
+//                 console.error("Error creating folder in database:", err);
+//                 // We still created the physical folder, so we'll return success
+//                 // Generate a virtual ID for this folder
+//                 const folderHash = crypto.createHash('md5').update(folder_name + created_by).digest('hex');
+//                 const virtualId = parseInt(folderHash.substring(0, 8), 16);
+
+//                 return res.status(201).send({
+//                     message: 'Folder created successfully (physical only)',
+//                     folder_id: virtualId,
+//                     folder_name: folder_name,
+//                     folder_path: folderPath
+//                 });
+//             }
+
+//             const folder_id = result.insertId;
+
+//             // Return success
+//             return res.status(201).send({
+//                 message: 'Folder created successfully',
+//                 folder_id: folder_id,
+//                 folder_path: folderPath,
+//                 folder_name: folder_name
+//             });
+//         });
+//     } catch (error) {
+//         console.error(`Error creating physical folder: ${error.message}`);
+//         return res.status(500).send('Error creating physical folder: ' + error.message);
+//     }
+// });
+
 router.post('/create-folder', (req, res) => {
-    const { folder_name, created_by, modified_by, user_email } = req.body;
+    const { folder_name, created_by, modified_by, user_email, parent_folder_id } = req.body;
     const email = user_email || created_by;
+
+    console.log("Parent folder id:", parent_folder_id);
 
     // Validate input
     if (!folder_name || !created_by) {
@@ -82,46 +153,110 @@ router.post('/create-folder', (req, res) => {
     }
 
     // Create physical folder on server
-    const folderPath = path.join(userDrivePath, folder_name);
-    
+    const folderPath = parent_folder_id
+        ? path.join(userDrivePath, parent_folder_id.toString(), folder_name)
+        : path.join(userDrivePath, folder_name);
+
     try {
         // Check if folder already exists
         if (fs.existsSync(folderPath)) {
             console.error(`Folder already exists: ${folderPath}`);
             return res.status(400).send('Folder with this name already exists');
         }
-        
-        // Create the folder
-        ensureFolder(folderPath);
-        
-        // Also create a database entry for compatibility
-        const query = `INSERT INTO drive_folders (folder_name, created_by, is_root, modified_by, is_shared, user_email)
-                      VALUES (?, ?, true, ?, false, ?)`;
 
-        db.query(query, [folder_name, created_by, modified_by || created_by, email], (err, result) => {
-            if (err) {
-                console.error("Error creating folder in database:", err);
-                // We still created the physical folder, so we'll return success
-                // Generate a virtual ID for this folder
-                const folderHash = crypto.createHash('md5').update(folder_name + created_by).digest('hex');
-                const virtualId = parseInt(folderHash.substring(0, 8), 16);
-                
-                return res.status(201).send({
-                    message: 'Folder created successfully (physical only)',
-                    folder_id: virtualId,
-                    folder_name: folder_name,
-                    folder_path: folderPath
-                });
+        // Create the physical folder
+        ensureFolder(folderPath);
+
+        // Validate parent_folder_id if provided
+        const validateParentFolder = (callback) => {
+            if (!parent_folder_id) {
+                return callback(null);
             }
 
-            const folder_id = result.insertId;
-            
-            // Return success
-            return res.status(201).send({
-                message: 'Folder created successfully',
-                folder_id: folder_id,
-                folder_path: folderPath,
-                folder_name: folder_name
+            const query = `SELECT folder_id FROM drive_folders WHERE folder_id = ?`;
+            db.query(query, [parent_folder_id], (err, results) => {
+                if (err) {
+                    console.error("Error validating parent folder:", err);
+                    return callback(`Error validating parent folder: ${err.message}`);
+                }
+                if (results.length === 0) {
+                    return callback(`Parent folder with ID ${parent_folder_id} does not exist`);
+                }
+                callback(null);
+            });
+        };
+
+        validateParentFolder((err) => {
+            if (err) {
+                return res.status(400).send(err);
+            }
+
+            // Insert into drive_folders
+            const query = `INSERT INTO drive_folders (folder_name, created_by, is_root, modified_by, is_shared, user_email)
+                          VALUES (?, ?, ?, ?, ?, ?)`;
+            const isRoot = !parent_folder_id; // Set is_root to false if parent_folder_id is provided
+            const values = [
+                folder_name,
+                created_by,
+                isRoot,
+                modified_by || created_by,
+                false,
+                email,
+            ];
+
+            db.query(query, values, (err, result) => {
+                if (err) {
+                    console.error("Error creating folder in database:", err);
+                    // Physical folder was created, so return a virtual ID
+                    const folderHash = crypto.createHash('md5').update(folder_name + created_by).digest('hex');
+                    const virtualId = parseInt(folderHash.substring(0, 8), 16);
+
+                    return res.status(201).send({
+                        message: 'Folder created successfully (physical only)',
+                        folder_id: virtualId,
+                        folder_name: folder_name,
+                        folder_path: folderPath,
+                        parent_folder_id: parent_folder_id || null
+                    });
+                }
+
+                const folder_id = result.insertId;
+
+                // Insert into drive_folder_structure if parent_folder_id is provided
+                if (parent_folder_id) {
+                    const structureQuery = `INSERT INTO drive_folder_structure (parent_folder_id, child_folder_id) VALUES (?, ?)`;
+                    db.query(structureQuery, [parent_folder_id, folder_id], (err) => {
+                        if (err) {
+                            console.error("Error inserting into drive_folder_structure:", err);
+                            // Folder was created in drive_folders, so still return success
+                            return res.status(201).send({
+                                message: 'Folder created successfully, but failed to update folder structure',
+                                folder_id: folder_id,
+                                folder_name: folder_name,
+                                folder_path: folderPath,
+                                parent_folder_id: parent_folder_id
+                            });
+                        }
+
+                        // Return success
+                        return res.status(201).send({
+                            message: 'Folder created successfully',
+                            folder_id: folder_id,
+                            folder_name: folder_name,
+                            folder_path: folderPath,
+                            parent_folder_id: parent_folder_id
+                        });
+                    });
+                } else {
+                    // No parent_folder_id, return success
+                    return res.status(201).send({
+                        message: 'Folder created successfully',
+                        folder_id: folder_id,
+                        folder_name: folder_name,
+                        folder_path: folderPath,
+                        parent_folder_id: null
+                    });
+                }
             });
         });
     } catch (error) {
@@ -160,37 +295,41 @@ router.get('/get_all_files_and_folders/:created_by', (req, res) => {
         return res.status(400).json({ error: 'User email is required' });
     }
 
+    // Get files from database (only where is_root = 1)
+    const query_files = `
+        SELECT * FROM drive_files 
+        WHERE (created_by = ? OR user_email = ?) AND is_root = 1
+    `;
 
-    // Get files from database
-    const query_files = `SELECT * FROM drive_files WHERE created_by = ? OR user_email = ?`;
-    
     db.query(query_files, [created_by, user_email], (err, files) => {
         if (err) {
             console.error("Error fetching files from database:", err);
-            return res.status(500).json({ 
+            return res.status(500).json({
                 error: `Error fetching files: ${err.message}`,
                 code: err.code,
                 sqlState: err.sqlState,
                 sqlMessage: err.sqlMessage
             });
         }
-        
-        // Get folders from database
-        const query_folders = `SELECT * FROM drive_folders WHERE created_by = ? OR user_email = ?`;
-        
+
+        // Get folders from database (only where is_root = 1)
+        const query_folders = `
+            SELECT * FROM drive_folders 
+            WHERE (created_by = ? OR user_email = ?) AND is_root = 1
+        `;
+
         db.query(query_folders, [created_by, user_email], (err, folders) => {
             if (err) {
                 console.error("Error fetching folders from database:", err);
-                return res.status(500).json({ 
+                return res.status(500).json({
                     error: `Error fetching folders: ${err.message}`,
                     code: err.code,
                     sqlState: err.sqlState,
                     sqlMessage: err.sqlMessage
                 });
             }
-            
-            
-            // Return both files and folders from database
+
+            // Return both files and folders
             res.status(200).json({
                 files: files,
                 folders: folders
@@ -198,6 +337,81 @@ router.get('/get_all_files_and_folders/:created_by', (req, res) => {
         });
     });
 });
+
+
+// Get Child folders 
+
+router.get('/folder/:folderId/contents', (req, res) => {
+    const { folderId } = req.params;
+    const { user_email, created_by } = req.query;
+
+    // Validate input
+    if (!folderId || !user_email || !created_by) {
+        return res.status(400).json({ error: 'Missing required parameters: folderId, user_email, or created_by' });
+    }
+
+    console.log(`Getting contents for folder ID: ${folderId} for user: ${user_email}`);
+
+    // Step 1: Get child folder IDs from drive_folder_structure
+    const childFolderQuery = `SELECT child_folder_id FROM drive_folder_structure WHERE parent_folder_id = ?`;
+
+    db.query(childFolderQuery, [folderId], (err, childFolderIdsResult) => {
+        if (err) {
+            console.error("Error fetching child folder IDs from database:", err);
+            return res.status(500).json({
+                error: `Error fetching child folder IDs: ${err.message}`,
+                code: err.code,
+                sqlState: err.sqlState,
+                sqlMessage: err.sqlMessage
+            });
+        }
+
+        const childFolderIds = childFolderIdsResult.map(row => row.child_folder_id);
+
+        // Step 2: Get folder details for child folder IDs
+        const folderQuery = `SELECT * FROM drive_folders WHERE folder_id IN (?) AND created_by = ?`;
+        const fileQuery = `SELECT * FROM drive_files WHERE parent_folder_id = ? AND user_email = ?`;
+
+        // Execute both queries in parallel
+        Promise.all([
+            new Promise((resolve, reject) => {
+                if (childFolderIds.length === 0) {
+                    resolve([]);
+                } else {
+                    db.query(folderQuery, [childFolderIds, created_by], (err, folders) => {
+                        if (err) reject(err);
+                        else resolve(folders);
+                    });
+                }
+            }),
+            new Promise((resolve, reject) => {
+                db.query(fileQuery, [folderId, user_email], (err, files) => {
+                    if (err) reject(err);
+                    else resolve(files);
+                });
+            })
+        ])
+            .then(([folders, files]) => {
+                // Return both folders and files
+                res.status(200).json({
+                    success: true,
+                    folders: folders,
+                    files: files,
+                    message: folders.length === 0 && files.length === 0 ? "No folders or files found" : undefined
+                });
+            })
+            .catch(err => {
+                console.error("Error fetching contents from database:", err);
+                res.status(500).json({
+                    error: `Error fetching contents: ${err.message}`,
+                    code: err.code,
+                    sqlState: err.sqlState,
+                    sqlMessage: err.sqlMessage
+                });
+            });
+    });
+});
+
 
 // Get folder by ID
 router.get('/folders/:id', (req, res) => {
@@ -318,64 +532,64 @@ router.delete('/folders/:id', (req, res) => {
 
     // Get folder data first
     const getFolderQuery = `SELECT * FROM drive_folders WHERE folder_id = ?`;
-    
+
     db.query(getFolderQuery, [folder_id], (err, folderResults) => {
         if (err) {
             console.error(`Database error fetching folder ${folder_id}:`, err);
             return res.status(500).send('Error fetching folder: ' + err.message);
         }
-        
+
         if (folderResults.length === 0) {
             return res.status(404).send('Folder not found');
         }
-        
+
         const folder = folderResults[0];
-        
+
         // Check if user is the folder creator or associated with it
         if (folder.created_by === created_by || folder.user_email === email) {
             proceedWithFolderDelete();
             return;
         }
-        
+
         // Check folder access permissions
         const folderAccessQuery = `SELECT * FROM drive_folder_access 
                                  WHERE folder_id = ? 
                                  AND (created_by = ? OR user_email = ?) 
                                  AND permission = 'FULL'`;
-        
+
         db.query(folderAccessQuery, [folder_id, created_by, email], (err, accessResults) => {
             if (err) {
                 console.error(`Error checking folder access: ${err.message}`);
                 return res.status(500).send(`Error checking folder access: ${err.message}`);
             }
-            
+
             if (accessResults.length > 0) {
                 proceedWithFolderDelete();
                 return;
             }
-            
+
             // No permission found
             console.error(`User ${created_by} has no permission to delete folder ${folder_id}`);
             return res.status(403).send('No permission to delete this folder');
         });
-        
+
         // Function to proceed with folder deletion after permission checks
         function proceedWithFolderDelete() {
             // Get folder path
             const userFolder = getUserFolderPath(folder.created_by || folder.user_email);
             const folderPath = path.join(userFolder, folder.folder_name);
-            
+
             // Delete physical folder
             try {
                 if (fs.existsSync(folderPath)) {
                     deleteFolderContents(folderPath);
                     fs.rmdirSync(folderPath);
-                } 
+                }
             } catch (error) {
                 console.error("Error deleting physical folder:", error);
                 // Continue with database deletion even if physical delete fails
             }
-            
+
             // Delete from database
             deleteFolderFromDB(folder_id, created_by, folder.folder_name, res);
         }
@@ -401,7 +615,7 @@ function deleteFolderContents(folderPath) {
 
 // Helper function to delete folder from database
 function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
-    
+
     // Delete folder access records
     db.query('DELETE FROM drive_folder_access WHERE folder_id = ?', [folder_id], (err, result) => {
         if (err) {
@@ -419,11 +633,11 @@ function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
                     if (err) {
                         console.error("Error finding files in folder:", err);
                     } else {
-                        
+
                         // Delete file access records for all files in folder
                         if (files.length > 0) {
                             const fileIds = files.map(file => file.file_id);
-                            
+
                             db.query('DELETE FROM drive_file_access WHERE file_id IN (?)', [fileIds], (err, result) => {
                                 if (err) {
                                     console.error("Error deleting file access:", err);
@@ -445,7 +659,7 @@ function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
                                 console.error(`Error deleting folder ${folder_id} from database:`, err);
                                 return res.status(500).send('Error deleting folder: ' + err.message);
                             }
-                             res.status(200).send({
+                            res.status(200).send({
                                 message: 'Folder deleted successfully',
                                 affected: result.affectedRows,
                                 folder_id: folder_id,
@@ -459,161 +673,399 @@ function deleteFolderFromDB(folder_id, created_by, folder_name, res) {
 }
 
 // Replace the upload-file route to work with physical file system directly
+// router.post('/upload-file', (req, res) => {
+
+//     const created_by = req.query.created_by;
+//     const user_email = req.query.user_email || created_by; // Use created_by as fallback
+
+//     // Validate input
+//     if (!created_by) {
+//         return res.status(400).send('Missing created_by parameter');
+//     }
+
+//     // Simplified approach - use the user's drive folder directly
+//     const userFolder = getUserFolderPath(created_by, false);
+//     const drivePath = path.join(userFolder, "drive");
+
+//     try {
+//         // Ensure the drive folder exists
+//         ensureFolder(drivePath);
+
+//         // Process the upload directly
+//         const bb = busboy({
+//             headers: req.headers,
+//             limits: {
+//                 fileSize: 50 * 1024 * 1024, // 50MB limit
+//             }
+//         });
+
+//         let filesUploaded = 0;
+//         let uploadPromises = [];
+
+//         bb.on('file', (name, file, info) => {
+//             const { filename, encoding, mimeType } = info;
+//             const file_name = filename;
+//             const file_type = path.extname(file_name).slice(1);
+//             const modified_by = created_by;
+
+//             const uploadPromise = new Promise((resolve, reject) => {
+//                 let fileSize = 0;
+//                 const chunks = [];
+
+//                 file.on('data', (data) => {
+//                     fileSize += data.length;
+//                     chunks.push(data);
+//                 });
+
+//                 file.on('close', async () => {
+//                     const file_size = fileSize / (1024 * 1024); // Convert to MB
+
+//                     try {
+//                         // Generate a unique filename to avoid collisions
+//                         const uniqueFileName = generateUniqueFilename(file_name);
+//                         const destPath = path.join(drivePath, uniqueFileName);
+
+//                         // Write the file to disk
+//                         fs.writeFile(destPath, Buffer.concat(chunks), (err) => {
+//                             if (err) {
+//                                 console.error("Error writing file to disk:", err);
+//                                 reject(new Error(`Error saving file to disk: ${err.message}`));
+//                                 return;
+//                             }
+
+
+//                             // Get actual file size on disk
+//                             const stats = fs.statSync(destPath);
+//                             const actualSize = stats.size;
+//                             const fileSizeMB = actualSize / (1024 * 1024); // Convert bytes to MB
+
+//                             // Save file metadata to database - we still need this for listing
+//                             const insertQuery = `INSERT INTO drive_files 
+//                                                (file_name, file_size, file_type, is_shared, created_by, modified_by, file_path, user_email) 
+//                                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+//                             db.query(insertQuery, [
+//                                 file_name,
+//                                 fileSizeMB,
+//                                 file_type,
+//                                 false, // is_shared
+//                                 created_by,
+//                                 modified_by,
+//                                 destPath,
+//                                 user_email
+//                             ], (err, result) => {
+//                                 if (err) {
+//                                     console.error("Database error saving file metadata:", err);
+//                                     // Try to remove the file on database error
+//                                     try {
+//                                         fs.unlinkSync(destPath);
+//                                         console.error('Removed file after database failure');
+//                                     } catch (e) {
+//                                         console.error('Error removing file after DB failure:', e);
+//                                     }
+//                                     reject(new Error(`Error saving file metadata: ${err.message}`));
+//                                     return;
+//                                 }
+
+//                                 const fileId = result.insertId;
+//                                 const response = {
+//                                     message: 'File uploaded successfully',
+//                                     file_id: fileId,
+//                                     file_path: destPath,
+//                                     file_name: file_name,
+//                                     file_size: fileSizeMB
+//                                 };
+
+//                                 // Only send response for the first file to avoid headers already sent error
+//                                 if (!res.headersSent) {
+//                                     res.status(201).send(response);
+//                                 }
+
+//                                 resolve(response);
+//                             });
+//                         });
+//                     } catch (error) {
+//                         console.error("Error processing file:", error);
+//                         reject(error);
+//                     }
+//                 });
+//             });
+
+//             uploadPromises.push(uploadPromise);
+//             filesUploaded++;
+//         });
+
+//         bb.on('finish', async () => {
+//             if (filesUploaded === 0) {
+//                 return res.status(400).send('No files were uploaded');
+//             }
+
+//             try {
+//                 await Promise.all(uploadPromises);
+//             } catch (error) {
+//                 console.error("Error during file upload:", error);
+//                 if (!res.headersSent) {
+//                     return res.status(500).send(`Error uploading files: ${error.message}`);
+//                 }
+//             }
+//         });
+
+//         bb.on('error', (error) => {
+//             console.error("Busboy error:", error);
+//             if (!res.headersSent) {
+//                 return res.status(500).send(`Upload error: ${error.message}`);
+//             }
+//         });
+
+//         req.pipe(bb);
+//     } catch (error) {
+//         console.error(`Error ensuring drive directory: ${error.message}`);
+//         return res.status(500).send(`Error ensuring drive directory: ${error.message}`);
+//     }
+// });
 router.post('/upload-file', (req, res) => {
-    
     const created_by = req.query.created_by;
-    const user_email = req.query.user_email || created_by; // Use created_by as fallback
-    
+    const user_email = req.query.user_email || created_by;
+    let parent_folder_id = req.query.parent_folder_id;
+    console.log("Parent folder id", parent_folder_id);
+
+    // Handle parent_folder_id if it's an array (take first value)
+    if (Array.isArray(parent_folder_id) && parent_folder_id.length > 0) {
+        parent_folder_id = parent_folder_id[0];
+        console.log("Using first parent folder id:", parent_folder_id);
+    }
+
     // Validate input
     if (!created_by) {
         return res.status(400).send('Missing created_by parameter');
     }
-    
-    // Simplified approach - use the user's drive folder directly
+
+    // Use the user's drive folder
     const userFolder = getUserFolderPath(created_by, false);
     const drivePath = path.join(userFolder, "drive");
-    
+
     try {
         // Ensure the drive folder exists
         ensureFolder(drivePath);
-        
-        // Process the upload directly
-        const bb = busboy({ 
-            headers: req.headers,
-            limits: {
-                fileSize: 50 * 1024 * 1024, // 50MB limit
-            } 
-        });
-        
-        let filesUploaded = 0;
-        let uploadPromises = [];
-        
-        bb.on('file', (name, file, info) => {
-            const { filename, encoding, mimeType } = info;
-            const file_name = filename;
-            const file_type = path.extname(file_name).slice(1);
-            const modified_by = created_by;
-            
-            const uploadPromise = new Promise((resolve, reject) => {
-                let fileSize = 0;
-                const chunks = [];
-                
-                file.on('data', (data) => {
-                    fileSize += data.length;
-                    chunks.push(data);
-                });
-                
-                file.on('close', async () => {
-                    const file_size = fileSize / (1024 * 1024); // Convert to MB
-                    
-                    try {
-                        // Generate a unique filename to avoid collisions
-                        const uniqueFileName = generateUniqueFilename(file_name);
-                        const destPath = path.join(drivePath, uniqueFileName);
-                        
-                        // Write the file to disk
-                        fs.writeFile(destPath, Buffer.concat(chunks), (err) => {
-                            if (err) {
-                                console.error("Error writing file to disk:", err);
-                                reject(new Error(`Error saving file to disk: ${err.message}`));
-                                return;
+
+        // Validate parent_folder_id if provided and get folder name if it exists
+        const validateParentFolder = (callback) => {
+            if (!parent_folder_id) {
+                return callback(null, null);
+            }
+
+            const query = `SELECT folder_id, folder_name FROM drive_folders WHERE folder_id = ?`;
+            db.query(query, [parent_folder_id], (err, results) => {
+                if (err) {
+                    console.error("Error validating parent folder:", err);
+                    return callback(`Error validating parent folder: ${err.message}`, null);
+                }
+                if (results.length === 0) {
+                    return callback(`Parent folder with ID ${parent_folder_id} does not exist`, null);
+                }
+                // Return both null error and the folder name
+                callback(null, results[0].folder_name);
+            });
+        };
+
+        validateParentFolder((err, parentFolderName) => {
+            if (err) {
+                return res.status(400).send(err);
+            }
+
+            // Process the upload
+            const bb = busboy({
+                headers: req.headers,
+                limits: {
+                    fileSize: 50 * 1024 * 1024, // 50MB limit
+                }
+            });
+
+            let filesUploaded = 0;
+            let uploadPromises = [];
+
+            bb.on('file', (name, file, info) => {
+                const { filename, encoding, mimeType } = info;
+                const file_name = filename;
+                const file_type = path.extname(file_name).slice(1);
+                const modified_by = created_by;
+
+                const uploadPromise = new Promise((resolve, reject) => {
+                    let fileSize = 0;
+                    const chunks = [];
+
+                    file.on('data', (data) => {
+                        fileSize += data.length;
+                        chunks.push(data);
+                    });
+
+                    file.on('close', async () => {
+                        const file_size = fileSize / (1024 * 1024); // Convert to MB
+
+                        try {
+                            // Generate a unique filename to avoid collisions
+                            const uniqueFileName = generateUniqueFilename(file_name);
+
+                            let folderPath;
+                            if (parent_folder_id) {
+                                // If parent folder exists, store in that folder path
+                                folderPath = path.join(drivePath, parent_folder_id.toString());
+                            } else {
+                                // If no parent, store directly in the user's drive root
+                                folderPath = drivePath;
                             }
-                            
-                            
-                            // Get actual file size on disk
-                            const stats = fs.statSync(destPath);
-                            const actualSize = stats.size;
-                            const fileSizeMB = actualSize / (1024 * 1024); // Convert bytes to MB
-                            
-                            // Save file metadata to database - we still need this for listing
-                            const insertQuery = `INSERT INTO drive_files 
-                                               (file_name, file_size, file_type, is_shared, created_by, modified_by, file_path, user_email) 
-                                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
-                            
-                            db.query(insertQuery, [
-                                file_name,
-                                fileSizeMB, 
-                                file_type,
-                                false, // is_shared
-                                created_by,
-                                modified_by,
-                                destPath,
-                                user_email
-                            ], (err, result) => {
+
+                            // Ensure the destination folder exists
+                            ensureFolder(folderPath);
+
+                            // Full path to save the file
+                            const destPath = path.join(folderPath, uniqueFileName);
+
+                            // Write the file to disk
+                            fs.writeFile(destPath, Buffer.concat(chunks), (err) => {
                                 if (err) {
-                                    console.error("Database error saving file metadata:", err);
-                                    // Try to remove the file on database error
-                                    try {
-                                        fs.unlinkSync(destPath);
-                                        console.error('Removed file after database failure');
-                                    } catch (e) {
-                                        console.error('Error removing file after DB failure:', e);
-                                    }
-                                    reject(new Error(`Error saving file metadata: ${err.message}`));
+                                    console.error("Error writing file to disk:", err);
+                                    reject(new Error(`Error saving file to disk: ${err.message}`));
                                     return;
                                 }
-                                
-                                const fileId = result.insertId;
-                                const response = {
-                                    message: 'File uploaded successfully',
-                                    file_id: fileId,
-                                    file_path: destPath,
-                                    file_name: file_name,
-                                    file_size: fileSizeMB
-                                };
-                                
-                                // Only send response for the first file to avoid headers already sent error
-                                if (!res.headersSent) {
-                                    res.status(201).send(response);
-                                }
-                                
-                                resolve(response);
+
+                                // Get actual file size on disk
+                                const stats = fs.statSync(destPath);
+                                const actualSize = stats.size;
+                                const fileSizeMB = actualSize / (1024 * 1024); // Convert bytes to MB
+
+                                // Save file metadata to database
+                                const insertQuery = `INSERT INTO drive_files 
+                                                   (file_name, file_size, file_type, is_shared, created_by, modified_by, file_path, user_email, is_root, parent_folder_id) 
+                                                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+                                const is_root = !parent_folder_id; // true if no parent_folder_id, false otherwise
+
+                                db.query(insertQuery, [
+                                    file_name,
+                                    fileSizeMB,
+                                    file_type,
+                                    false, // is_shared
+                                    created_by,
+                                    modified_by,
+                                    destPath,
+                                    user_email,
+                                    is_root,
+                                    parent_folder_id || null
+                                ], (err, result) => {
+                                    if (err) {
+                                        console.error("Database error saving file metadata:", err);
+                                        // Try to remove the file on database error
+                                        try {
+                                            fs.unlinkSync(destPath);
+                                            console.error('Removed file after database failure');
+                                        } catch (e) {
+                                            console.error('Error removing file after DB failure:', e);
+                                        }
+                                        reject(new Error(`Error saving file metadata: ${err.message}`));
+                                        return;
+                                    }
+
+                                    const fileId = result.insertId;
+
+                                    // Always insert into drive_folder_structure if parent_folder_id is provided
+                                    if (parent_folder_id) {
+                                        const structureQuery = `INSERT INTO drive_folder_structure (parent_folder_id, child_file_id) VALUES (?, ?)`;
+                                        db.query(structureQuery, [parent_folder_id, fileId], (err) => {
+                                            if (err) {
+                                                console.error("Error inserting into drive_folder_structure:", err);
+                                                // File was saved, so return partial success
+                                                const response = {
+                                                    message: 'File uploaded successfully, but failed to update folder structure',
+                                                    file_id: fileId,
+                                                    file_path: destPath,
+                                                    file_name: file_name,
+                                                    file_size: fileSizeMB,
+                                                    parent_folder_id: parent_folder_id
+                                                };
+                                                if (!res.headersSent) {
+                                                    res.status(201).send(response);
+                                                }
+                                                resolve(response);
+                                                return;
+                                            }
+
+                                            // Full success
+                                            const response = {
+                                                message: 'File uploaded successfully',
+                                                file_id: fileId,
+                                                file_path: destPath,
+                                                file_name: file_name,
+                                                file_size: fileSizeMB,
+                                                parent_folder_id: parent_folder_id
+                                            };
+                                            if (!res.headersSent) {
+                                                res.status(201).send(response);
+                                            }
+                                            resolve(response);
+                                        });
+                                    } else {
+                                        // No parent_folder_id, return success
+                                        const response = {
+                                            message: 'File uploaded successfully',
+                                            file_id: fileId,
+                                            file_path: destPath,
+                                            file_name: file_name,
+                                            file_size: fileSizeMB,
+                                            parent_folder_id: null
+                                        };
+                                        if (!res.headersSent) {
+                                            res.status(201).send(response);
+                                        }
+                                        resolve(response);
+                                    }
+                                });
                             });
-                        });
-                    } catch (error) {
-                        console.error("Error processing file:", error);
+                        } catch (error) {
+                            console.error("Error processing file:", error);
+                            reject(error);
+                        }
+                    });
+
+                    file.on('error', (error) => {
+                        console.error("Error with file stream:", error);
                         reject(error);
-                    }
+                    });
                 });
-                
-                file.on('error', (error) => {
-                    console.error("Error with file stream:", error);
-                    reject(error);
-                });
+
+                uploadPromises.push(uploadPromise);
+                filesUploaded++;
             });
-            
-            uploadPromises.push(uploadPromise);
-            filesUploaded++;
-        });
-        
-        bb.on('finish', async () => {
-            if (filesUploaded === 0) {
-                return res.status(400).send('No files were uploaded');
-            }
-            
-            try {
-                await Promise.all(uploadPromises);
-            } catch (error) {
-                console.error("Error during file upload:", error);
-                if (!res.headersSent) {
-                    return res.status(500).send(`Error uploading files: ${error.message}`);
+
+            bb.on('finish', async () => {
+                if (filesUploaded === 0) {
+                    return res.status(400).send('No files were uploaded');
                 }
-            }
+
+                try {
+                    await Promise.all(uploadPromises);
+                } catch (error) {
+                    console.error("Error during file upload:", error);
+                    if (!res.headersSent) {
+                        return res.status(500).send(`Error uploading files: ${error.message}`);
+                    }
+                }
+            });
+
+            bb.on('error', (error) => {
+                console.error("Busboy error:", error);
+                if (!res.headersSent) {
+                    return res.status(500).send(`Upload error: ${error.message}`);
+                }
+            });
+
+            req.pipe(bb);
         });
-        
-        bb.on('error', (error) => {
-            console.error("Busboy error:", error);
-            if (!res.headersSent) {
-                return res.status(500).send(`Upload error: ${error.message}`);
-            }
-        });
-        
-        req.pipe(bb);
     } catch (error) {
         console.error(`Error ensuring drive directory: ${error.message}`);
         return res.status(500).send(`Error ensuring drive directory: ${error.message}`);
     }
 });
+
 
 // Get files with modified parameter handling
 router.get('/files', (req, res) => {
@@ -887,25 +1339,25 @@ router.delete('/files/:id', (req, res) => {
 
     // First, get the file data to know what we're deleting
     const getFileQuery = `SELECT * FROM drive_files WHERE file_id = ?`;
-    
+
     db.query(getFileQuery, [file_id], (err, fileResults) => {
         if (err) {
             console.error(`Database error fetching file ${file_id}:`, err);
             return res.status(500).send('Error fetching file: ' + err.message);
         }
-        
+
         if (fileResults.length === 0) {
             return res.status(404).send('File not found');
         }
-        
+
         const fileData = fileResults[0];
-        
+
         // Simplified permission check - just check if the user created the file
         if (fileData.created_by !== created_by && fileData.user_email !== email) {
             console.error(`User ${created_by} does not own file ${file_id}`);
             return res.status(403).send('You do not have permission to delete this file');
         }
-        
+
         // Delete the physical file
         if (fileData.file_path && fs.existsSync(fileData.file_path)) {
             try {
@@ -914,7 +1366,7 @@ router.delete('/files/:id', (req, res) => {
                 console.error(`Error deleting physical file ${fileData.file_path}:`, error);
                 // Continue with database deletion even if physical delete fails
             }
-        } 
+        }
 
         // Delete file record from database
         const deleteQuery = `DELETE FROM drive_files WHERE file_id = ?`;

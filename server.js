@@ -144,6 +144,10 @@ app.use('/Admin', adminRoutes);
 // drive routes
 app.use('/drive', drive_rout);
 
+//starred routes
+app.use('/starred', starred_route);
+
+
 // owner routes
 app.use('/owner', ownerRoutes);
 app.use('/owner_v2', ownerRoutes_v2);
@@ -156,9 +160,6 @@ app.use('/team_members', team_members);
 
 // reviews routes
 app.use('/reviews', reviews_rout);
-
-//starred routes
-app.use('/starred', starred_route);
 
 // calendar routes
 app.use('/calendar', calendarRoutes);

@@ -42,33 +42,37 @@ router.put('/drive/:type/:id', async (req, res) => {
     }
 });
 
-// router.get('/drive/starred', async (req, res) => {
-//     const { user_email } = req.query;
+router.get('/drive/get_starred_items', async (req, res) => {
+    const user_email = req.query.user_email;
+    console.log("for get starred items message", user_email);
 
-//     if (!user_email) {
-//         return res.status(400).json({ error: 'Missing user_email in query' });
-//     }
+    if (!user_email) {
+        return res.status(400).json({ error: 'User email is required' });
+    }
 
-//     try {
-//         const [results] = await db.query(`
-//             SELECT 
-//                 id,
-//                 item_name AS name,
-//                 type,
-//                 file_type,
-//                 size,
-//                 created_at,
-//                 starred_at
-//             FROM drive_files
-//             WHERE is_starred = 1
-//         `);
+    try {
+        // Query for starred folders
+        const [starredFolders] = await db.promise().query(
+            `SELECT * FROM drive_folders WHERE user_email = ? AND is_starred = 1`,
+            [user_email]
+        );
 
-//         res.json(results);
-//     } catch (error) {
-//         console.error('Error fetching starred items:', error);
-//         res.status(500).json({ error: 'Internal server error' });
-//     }
-// });
+        // Query for starred files
+        const [starredFiles] = await db.promise().query(
+            `SELECT * FROM drive_files WHERE user_email = ? AND is_starred = 1`,
+            [user_email]
+        );
+
+        // Send response with both starred folders and files
+        res.status(200).json({
+            starred_folders: starredFolders,
+            starred_files: starredFiles
+        });
+    } catch (error) {
+        console.error('Error fetching starred items:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
 
 
 module.exports = router;
