@@ -207,7 +207,8 @@ router.post('/create-folder', (req, res) => {
             db.query(query, values, (err, result) => {
                 if (err) {
                     console.error("Error creating folder in database:", err);
-                    // Physical folder was created, so return a virtual ID
+                    // Physical folder was created, so we'll return success
+                    // Generate a virtual ID for this folder
                     const folderHash = crypto.createHash('md5').update(folder_name + created_by).digest('hex');
                     const virtualId = parseInt(folderHash.substring(0, 8), 16);
 
@@ -900,7 +901,8 @@ router.post('/upload-file', (req, res) => {
                     });
 
                     file.on('close', async () => {
-                        const file_size = fileSize / (1024 * 1024); // Convert to MB
+                        // Store the file size in bytes directly, not MB
+                        const file_size_bytes = fileSize;
 
                         try {
                             // Generate a unique filename to avoid collisions
@@ -929,10 +931,9 @@ router.post('/upload-file', (req, res) => {
                                     return;
                                 }
 
-                                // Get actual file size on disk
+                                // Get actual file size on disk in bytes
                                 const stats = fs.statSync(destPath);
-                                const actualSize = stats.size;
-                                const fileSizeMB = actualSize / (1024 * 1024); // Convert bytes to MB
+                                const actualSizeBytes = stats.size;
 
                                 // Save file metadata to database
                                 const insertQuery = `INSERT INTO drive_files 
@@ -942,7 +943,7 @@ router.post('/upload-file', (req, res) => {
 
                                 db.query(insertQuery, [
                                     file_name,
-                                    fileSizeMB,
+                                    actualSizeBytes, // Store size in bytes, not MB
                                     file_type,
                                     false, // is_shared
                                     created_by,
@@ -979,7 +980,7 @@ router.post('/upload-file', (req, res) => {
                                                     file_id: fileId,
                                                     file_path: destPath,
                                                     file_name: file_name,
-                                                    file_size: fileSizeMB,
+                                                    file_size: actualSizeBytes, // Return size in bytes
                                                     parent_folder_id: parent_folder_id
                                                 };
                                                 if (!res.headersSent) {
@@ -995,7 +996,7 @@ router.post('/upload-file', (req, res) => {
                                                 file_id: fileId,
                                                 file_path: destPath,
                                                 file_name: file_name,
-                                                file_size: fileSizeMB,
+                                                file_size: actualSizeBytes, // Return size in bytes
                                                 parent_folder_id: parent_folder_id
                                             };
                                             if (!res.headersSent) {
@@ -1010,7 +1011,7 @@ router.post('/upload-file', (req, res) => {
                                             file_id: fileId,
                                             file_path: destPath,
                                             file_name: file_name,
-                                            file_size: fileSizeMB,
+                                            file_size: actualSizeBytes, // Return size in bytes
                                             parent_folder_id: null
                                         };
                                         if (!res.headersSent) {
@@ -1137,7 +1138,7 @@ function getFilesAndFolders(parent_folder_id, created_by, res) {
                               JOIN drive_folder_structure fs ON f.folder_id = fs.child_folder_id
                               WHERE fs.parent_folder_id = ?`;
 
-        // Get files
+        // Get files with explicit mention of file_size
         const fileQuery = `SELECT file_id, file_name, file_size, file_type, parent_folder_id,
                          is_shared, created_date, modified_date, created_by, modified_by 
                          FROM drive_files WHERE parent_folder_id = ?`;
@@ -1151,6 +1152,16 @@ function getFilesAndFolders(parent_folder_id, created_by, res) {
             db.query(fileQuery, [parent_folder_id], (err, files) => {
                 if (err) {
                     return res.status(500).send('Error retrieving files: ' + err.message);
+                }
+
+                // Log file info including file_size to verify data
+                if (files && files.length > 0) {
+                    console.log(`Retrieved ${files.length} files, example file:`, {
+                        file_id: files[0].file_id,
+                        file_name: files[0].file_name,
+                        file_size: files[0].file_size,
+                        file_type: files[0].file_type
+                    });
                 }
 
                 res.status(200).json({
