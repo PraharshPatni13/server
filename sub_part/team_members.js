@@ -1009,6 +1009,7 @@ router.post("/photographers", (req, res) => {
 
 // Create a new endpoint to handle team member assignment
 router.post("/add-team-members", async (req, res) => {
+  console.log("req.body", req.body);
   const { user_email, team_members, event_id, socket_id } = req.body;
 
   if (!user_email || !team_members || !event_id) {
