@@ -22,11 +22,11 @@ function formatDate(isoString) {
 router.get("/get_all_today_events", (req, res) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   // Get yesterday's start
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
-  
+
   // Get tomorrow's end
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -45,8 +45,8 @@ router.get("/get_all_today_events", (req, res) => {
     }
 
     // console.log(results);
-    
-    
+
+
     res.json({
       total_events: results.length,
       events: results
@@ -77,28 +77,56 @@ router.post("/add-event", (req, res) => {
     }
   );
 });
+// router.post("/add-event-with-success", (req, res) => {
+//   const { title, start, end, description, backgroundColor, user_email } =
+//     req.body;
+
+//   console.log(req.body);
+
+//   // Directly insert the event, assuming user_email is valid and exists in the owner table
+//   const query =
+//     "INSERT INTO events (title, start, end, description, backgroundColor, user_email) VALUES (?, ?, ?, ?, ?, ?)";
+
+//   db.query(
+//     query,
+//     [title, start, end, description, backgroundColor, user_email],
+//     (err, result) => {
+//       if (err) {
+//         console.error("Error creating event:", err);
+//         return res.status(500).json({ error: "Failed to create event" });
+//       }
+//       console.log(title, formatDate(start), formatDate(end), description, user_email);
+//       // send_event_confirmation_email(sender_email, title, formatDate(start), formatDate(end), description,event_location, user_email);
+
+//       res
+//         .status(201)
+//         .json({ id: result.insertId, message: "Event created successfully" });
+//     }
+//   );
+// });
+
+// Get all events for a specific user
 router.post("/add-event-with-success", (req, res) => {
-  const { title, start, end, description, backgroundColor, user_email,sender_email,event_location } =
+  const { title, start, end, description, backgroundColor, user_email, team_members } =
     req.body;
+
+  const memberIdsOnly = team_members.map(member => member.member_id);
+
 
   // Directly insert the event, assuming user_email is valid and exists in the owner table
   const query =
-    "INSERT INTO events (title, start, end, description, backgroundColor, user_email) VALUES (?, ?, ?, ?, ?, ?)";
+    "INSERT INTO events (title, start, end, description, backgroundColor, user_email, assigned_members) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
   db.query(
     query,
-    [title, start, end, description, backgroundColor, user_email],
+    [title, start, end, description, backgroundColor, user_email, JSON.stringify(memberIdsOnly)],
     (err, result) => {
       if (err) {
         console.error("Error creating event:", err);
         return res.status(500).json({ error: "Failed to create event" });
       }
-      console.log(sender_email, title, formatDate(start), formatDate(end), description, user_email);
+      console.log(title, formatDate(start), formatDate(end), description, user_email);
       // send_event_confirmation_email(sender_email, title, formatDate(start), formatDate(end), description,event_location, user_email);
-
-
-
-
 
       res
         .status(201)
@@ -107,9 +135,9 @@ router.post("/add-event-with-success", (req, res) => {
   );
 });
 
-// Get all events for a specific user
 router.post("/events_by_user", (req, res) => {
   const { user_email } = req.body;
+
 
   // Query to fetch events by user_email
   const query = "SELECT * FROM events WHERE user_email = ?";
@@ -120,7 +148,7 @@ router.post("/events_by_user", (req, res) => {
       return res.status(500).json({ error: "Failed to fetch events" });
     }
     if (results.length === 0) {
-      return res.status(404).json({ error: "No events found for this user" });
+      return res.status(200).json({ message: "No events found for this user" });
     }
     res.json(results);
   });
