@@ -1866,10 +1866,99 @@ router.get('/storage', (req, res) => {
     }
 });
 
+router.post('/get_all_file_size', (req, res) => {
+    const { user_email } = req.body;
+    const query = `SELECT SUM(file_size) as total_size FROM drive_files WHERE user_email = ?`;
+    db.query(query, [user_email], (err, results) => {
+        if (err) {
+            return res.status(500).send('Error calculating storage: ' + err.message);
+        }
+        res.status(200).json(results[0].total_size || 0);
+    });
+});
+
 // Replace the compatibility upload route with Busboy implementation
 router.post('/upload', (req, res) => {
     // Redirect to the upload-file endpoint
     res.redirect(307, `/drive/upload-file${req.url.substring(req.url.indexOf('?'))}`);
+});
+
+// Add this new function for categorizing files by type
+function categorizeFilesByType(files) {
+    const categories = {
+        images: { size: 0, percentage: 0, extensions: ['.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.tiff'] },
+        documents: { size: 0, percentage: 0, extensions: ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.rtf', '.odt'] },
+        videos: { size: 0, percentage: 0, extensions: ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.mkv', '.webm', '.m4v', '.3gp'] },
+        others: { size: 0, percentage: 0, extensions: [] }
+    };
+    
+    let totalSize = 0;
+    
+    // First, categorize all files and calculate total size
+    files.forEach(file => {
+        const fileExt = '.' + file.file_name.split('.').pop().toLowerCase();
+        const fileSize = parseInt(file.file_size) || 0;
+        totalSize += fileSize;
+        
+        let categorized = false;
+        
+        // Check which category this file belongs to
+        for (const [category, data] of Object.entries(categories)) {
+            if (category !== 'others' && data.extensions.includes(fileExt)) {
+                categories[category].size += fileSize;
+                categorized = true;
+                break;
+            }
+        }
+        
+        // If not categorized, put in others
+        if (!categorized) {
+            categories.others.size += fileSize;
+        }
+    });
+    
+    // Calculate percentages if total size is not zero
+    if (totalSize > 0) {
+        for (const category in categories) {
+            categories[category].percentage = Math.round((categories[category].size / totalSize) * 100);
+        }
+    }
+    
+    // Remove the extensions array from the result
+    for (const category in categories) {
+        delete categories[category].extensions;
+    }
+    
+    return categories;
+}
+
+// Add this new route handler after an existing route
+router.post('/get_storage_stats', (req, res) => {
+    try {
+        const { user_email } = req.body;
+        
+        if (!user_email) {
+            return res.status(400).json({ error: 'User email is required' });
+        }
+        
+        // Query all files for this user
+        const query = 'SELECT file_name, file_size FROM drive_files WHERE user_email = ?';
+        
+        db.query(query, [user_email], (err, results) => {
+            if (err) {
+                console.error('Error fetching files for storage stats:', err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+            
+            // Categorize files and calculate stats
+            const stats = categorizeFilesByType(results);
+            
+            res.json(stats);
+        });
+    } catch (error) {
+        console.error('Error in get_storage_stats:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 module.exports = router;
