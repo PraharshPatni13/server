@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2');
 require('dotenv').config();
+const {send_shared_item_email} = require('../modules/send_server_email');
 
 
 
@@ -187,11 +188,8 @@ router.post('/share_with_permission', (req, res) => {
 
     const insertData = [];
 
-    // Loop through each shared_with email and prepare data for insertion
     for (const owner of share_with) {
         const { email, permission } = owner;
-        console.log("email", permission);
-
         if (!['read', 'write', 'admin'].includes(permission)) {
             return res.status(400).json({ error: `Invalid permission for ${email}` });
         }
@@ -215,29 +213,63 @@ router.post('/share_with_permission', (req, res) => {
 
     db.query(sql, [insertData], (err, result) => {
         if (err) {
-            console.error("Error inserting data into drive_file_access:", err);
+            console.error("Error inserting data:", err);
             return res.status(500).json({ error: "Failed to share item" });
         }
 
-        // ✅ After sharing, update is_shared = 1 for the folder or file
-        let updateSql = "";
-        if (item_type === 'folder') {
-            updateSql = `UPDATE drive_folders SET is_shared = 1 WHERE folder_id = ?`;
-        } else if (item_type === 'file') {
-            updateSql = `UPDATE drive_files SET is_shared = 1 WHERE file_id = ?`;
-        }
+        const updateSql = item_type === 'folder'
+            ? `UPDATE drive_folders SET is_shared = 1 WHERE folder_id = ?`
+            : `UPDATE drive_files SET is_shared = 1 WHERE file_id = ?`;
 
-        db.query(updateSql, [item_id], (updateErr, updateResult) => {
+        db.query(updateSql, [item_id], async (updateErr) => {
             if (updateErr) {
-                console.error("Error updating is_shared field:", updateErr);
+                console.error("Error updating shared flag:", updateErr);
                 return res.status(500).json({ error: "Failed to update shared status" });
             }
 
-            res.json({ message: "Items shared successfully and is_shared updated" });
+            try {
+                // Get item name and shared_by user name
+                const itemQuery = item_type === 'folder'
+                    ? `SELECT folder_name AS name FROM drive_folders WHERE folder_id = ?`
+                    : `SELECT file_name AS name FROM drive_files WHERE file_id = ?`;
+
+                const userQuery = `SELECT user_name FROM owner WHERE user_email = ?`;
+                console.log("item_id.............", item_id,shared_by);
+
+                db.query(itemQuery, [item_id], (itemErr, itemResults) => {
+                    if (itemErr || itemResults.length === 0) {
+                        console.error("Failed to get item name", itemErr);
+                        return res.status(500).json({ error: "Failed to get item name" });
+                    }
+
+                    const itemName = itemResults[0].name;
+
+                    db.query(userQuery, [shared_by], async (userErr, userResults) => {
+                        if (userErr || userResults.length === 0) {
+                            console.error("Failed to get user name", userErr);
+                            return res.status(500).json({ error: "Failed to get user info" });
+                        }
+                        console.log("userResults.............", userResults);
+
+                        const sharedByName = userResults[0].user_name;
+                        console.log("sharedByName.............", sharedByName);
+                        
+                        for (const owner of share_with) {
+                            const { email, permission } = owner;
+                            console.log("email.............", shared_by, sharedByName, email, item_type, itemName, permission);
+                            await send_shared_item_email(shared_by, sharedByName, email, item_type, itemName, permission);
+                        }
+
+                        res.json({ message: "Items shared and emails sent successfully" });
+                    });
+                });
+            } catch (emailErr) {
+                console.error('Error sending emails:', emailErr);
+                return res.status(500).json({ error: "Failed to send emails" });
+            }
         });
     });
 });
-
 
 
 module.exports = router;
