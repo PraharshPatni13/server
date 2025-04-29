@@ -18,6 +18,7 @@ const reviews_rout = require('./sub_part/reviews_rout');
 const starred_route = require('./sub_part/starred_routes');
 const calendarRoutes = require('./sub_part/calendar_rout');
 const fileRoutesForPreview = require('./sub_part/fileRoutesForPreview');
+const share_drive = require('./sub_part/share_drive');
 
 // @shrey11_  start ---- 
 // @shrey11_  start ---- 
@@ -143,6 +144,8 @@ app.use('/Admin', adminRoutes);
 
 // drive routes
 app.use('/drive', drive_rout);
+
+app.use('/share_drive', share_drive);
 
 //starred routes
 app.use('/starred', starred_route);
