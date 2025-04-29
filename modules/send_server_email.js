@@ -254,6 +254,67 @@ async function send_team_event_confirmation_email(member_email, member_name, eve
     }
 }
 
+// drive share email
+async function send_shared_item_email(shared_by,sharedByName, shared_with_email, item_type, item_name, permission) {
+    try {
+        // Load the shared item template
+        let template;
+        try {
+            template = await fs.readFile(path.join(__dirname, 'file_share_notification.html'), 'utf8');
+        } catch (error) {
+            console.error(`Error reading email template: ${error.message}`);
+            template = `
+                <div style="font-family: Arial, sans-serif; background: #f4f6f8; padding: 20px;">
+                    <div style="background: #ffffff; border-radius: 8px; padding: 30px; max-width: 600px; margin: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                        <h2 style="background: linear-gradient(to right, #2c3e50, #3498db); color: white; padding: 15px; border-radius: 6px 6px 0 0; text-align: center;">
+                            📁 New {{item_type}} Shared
+                        </h2>
+                        <div style="padding: 20px; color: #333;">
+                            <p>Hello,</p>
+                            <p><strong>{{shared_by_name}}</strong> has shared a <strong>{{item_type}}</strong> "<strong>{{item_name}}</strong>" with you, with <strong>{{permission}}</strong> permissions.</p>
+                            <p>Click the button below to access it:</p>
+                            <div style="text-align: center; margin-top: 20px;">
+                                <a href="{{access_url}}" style="display:inline-block; margin-top:25px; background:linear-gradient(90deg, #4e54c8, #8f94fb); color:white; text-decoration:none; padding:12px 24px; border-radius:6px; font-size:16px;">
+                                    {{item_icon}} View Shared Item
+                                </a>
+                            </div>
+                        </div>
+                        <div style="text-align: center; font-size: 13px; color: #777; padding-top: 20px;">
+                            Powered by Your Drive App
+                        </div>
+                    </div>
+                </div>
+            `;
+            console.info('Fallback email template used');
+        }
+
+        const baseUrl = process.env.APP_URL || "http://localhost:3000";
+        const accessUrl = `${baseUrl}/shared`;
+
+        const icon = item_type === 'folder' ? '📁' : '📄';
+
+        const htmlContent = template
+            .replace(/{{shared_by_name}}/g, sharedByName)
+            .replace(/{{item_type}}/g, item_type)
+            .replace(/{{item_name}}/g, item_name)
+            .replace(/{{permission}}/g, permission)
+            .replace(/{{access_url}}/g, accessUrl)
+            .replace(/{{item_icon}}/g, icon);
+
+        await send_email(
+            shared_with_email,
+            `New ${item_type} shared with you`,
+            htmlContent
+        );
+
+        return true;
+    } catch (error) {
+        console.error('Failed to send shared item email:', error);
+        return false;
+    }
+}
+
+
 async function notifyEventConfirmationUpdate(io, event_id, receiver_email) {
     try {
         // Emit socket events to notify the owner about team confirmation updates
@@ -282,5 +343,6 @@ module.exports = {
     send_team_invitation_email,
     send_owner_notification_email,
     send_team_event_confirmation_email,
-    notifyEventConfirmationUpdate
+    notifyEventConfirmationUpdate,
+    send_shared_item_email
 };

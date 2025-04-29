@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en" style="margin:0; padding:0;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Item Shared Notification</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f6f8; font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;">
+    <div style="max-width:600px; margin:30px auto; background:white; border-radius:10px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+        
+        <!-- Header -->
+        <div style="background: linear-gradient(90deg, #4e54c8, #8f94fb); padding:20px; text-align:center;">
+            <img src="https://cdn-icons-png.flaticon.com/512/3596/3596093.png" alt="Share Icon" width="60" style="margin-bottom:10px;">
+            <h1 style="color:white; margin:0; font-size:24px;">New Item Shared with You!</h1>
+        </div>
+
+        <!-- Main Body -->
+        <div style="padding:30px;">
+            <p style="font-size:16px; color:#333;">Hello,</p>
+
+            <div style="margin:20px 0; padding:20px; background-color:#eef1f8; border-left:5px solid #4e54c8; border-radius:8px;">
+                <p style="font-size:18px; color:#333; margin:0;">
+                    <strong>{{shared_by_name}}</strong> has shared a 
+                    <strong style="color:#4e54c8;">{{item_type}}</strong> with you.
+                </p>
+            </div>
+
+            <div style="margin:20px 0; padding:20px; background-color:#f9f9f9; border:1px solid #eee; border-radius:8px; text-align:center;">
+                <img src="https://cdn-icons-png.flaticon.com/512/2991/2991108.png" alt="Item Illustration" width="60" style="margin-bottom:15px;">
+                <p style="font-size:20px; color:#222; margin:0;"><strong>{{item_name}}</strong></p>
+                <p style="font-size:14px; color:#666; margin-top:8px;">Permission granted: <strong>{{permission}}</strong></p>
+            </div>
+
+            <div style="text-align:center;">
+                <a href="{{view_link}}" style="display:inline-block; margin-top:25px; background:linear-gradient(90deg, #4e54c8, #8f94fb); color:white; text-decoration:none; padding:12px 24px; border-radius:6px; font-size:16px;">
+                    📂 View Shared Item
+                </a>
+            </div>
+
+            <p style="font-size:13px; color:#999; margin-top:30px; text-align:center;">
+                If you did not expect this sharing action, you can safely ignore this email.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <div style="text-align:center; padding:15px; font-size:12px; color:#bbb; background-color:#f9f9f9;">
+            © 2025 Your Company Name. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>
