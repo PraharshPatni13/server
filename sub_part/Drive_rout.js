@@ -878,9 +878,10 @@ router.post('/upload-file', (req, res) => {
             const bb = busboy({
                 headers: req.headers,
                 limits: {
-                    fileSize: 50 * 1024 * 1024, // 50MB limit
+                    fileSize: 500 * 1024 * 1024, // 500MB limit
                 }
             });
+
 
             let filesUploaded = 0;
             let uploadPromises = [];
@@ -1181,28 +1182,24 @@ function getFilesAndFolders(parent_folder_id, created_by, res) {
 // Get file by ID
 router.get('/files/:id', (req, res) => {
     const file_id = req.params.id;
-    const { created_by, download } = req.query;
+    const { created_by, download, download_source } = req.query;
+    const email = req.query.user_email || created_by;
 
     // Validate input
     if (!created_by) {
         return res.status(400).send('User email is required');
     }
 
-    // Check permissions through parent folder
-    const permCheck = `SELECT f.*, fold.folder_name, fold.created_by AS folder_owner 
-                      FROM drive_files f
-                      JOIN drive_folders fold ON f.parent_folder_id = fold.folder_id
-                      WHERE f.file_id = ? AND (fold.created_by = ? OR fold.folder_id IN 
-                      (SELECT folder_id FROM drive_folder_access WHERE created_by = ?) OR
-                      f.file_id IN (SELECT file_id FROM drive_file_access WHERE created_by = ?))`;
+    // Simplified query - just get the file by ID
+    const fileQuery = `SELECT * FROM drive_files WHERE file_id = ?`;
 
-    db.query(permCheck, [file_id, created_by, created_by, created_by], (err, results) => {
+    db.query(fileQuery, [file_id], (err, results) => {
         if (err) {
-            return res.status(500).send('Error checking permissions: ' + err.message);
+            return res.status(500).send('Error retrieving file: ' + err.message);
         }
 
         if (results.length === 0) {
-            return res.status(403).send('No permission to access this file');
+            return res.status(404).send('File not found');
         }
 
         const fileData = results[0];
@@ -1210,26 +1207,35 @@ router.get('/files/:id', (req, res) => {
         // If download is requested, send the file
         if (download === 'true') {
             if (!fileData.file_path || !fs.existsSync(fileData.file_path)) {
-                // Try the default path if file_path is not set
-                const userFolder = getUserFolderPath(fileData.folder_owner);
-                const defaultPath = path.join(userFolder, fileData.folder_name, fileData.file_name);
+                // Try to find the file using folder information
+                const folderQuery = `SELECT * FROM drive_folders WHERE folder_id = ?`;
 
-                if (!fs.existsSync(defaultPath)) {
-                    return res.status(404).send('File not found on server');
-                }
+                db.query(folderQuery, [fileData.parent_folder_id], (err, folderResults) => {
+                    if (err || folderResults.length === 0) {
+                        return res.status(404).send('File not found on server');
+                    }
 
-                return res.download(defaultPath, fileData.file_name, (err) => {
+                    const folder = folderResults[0];
+                    const userFolder = getUserFolderPath(folder.created_by);
+                    const defaultPath = path.join(userFolder, folder.folder_name, fileData.file_name);
+
+                    if (!fs.existsSync(defaultPath)) {
+                        return res.status(404).send('File not found on server');
+                    }
+
+                    return res.download(defaultPath, fileData.file_name, (err) => {
+                        if (err) {
+                            return res.status(500).send('Error downloading file: ' + err.message);
+                        }
+                    });
+                });
+            } else {
+                return res.download(fileData.file_path, fileData.file_name, (err) => {
                     if (err) {
                         return res.status(500).send('Error downloading file: ' + err.message);
                     }
                 });
             }
-
-            return res.download(fileData.file_path, fileData.file_name, (err) => {
-                if (err) {
-                    return res.status(500).send('Error downloading file: ' + err.message);
-                }
-            });
         } else {
             // Otherwise just return metadata
             delete fileData.file_path; // Don't expose server file path
@@ -1890,16 +1896,16 @@ function categorizeFilesByType(files) {
         videos: { size: 0, percentage: 0, extensions: ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.mkv', '.webm', '.m4v', '.3gp'] },
         others: { size: 0, percentage: 0, extensions: [] }
     };
-    
+
     let totalSize = 0;
-    
+
     files.forEach(file => {
         const fileExt = '.' + file.file_name.split('.').pop().toLowerCase();
         const fileSize = parseInt(file.file_size) || 0;
         totalSize += fileSize;
-        
+
         let categorized = false;
-        
+
         // Check which category this file belongs to
         for (const [category, data] of Object.entries(categories)) {
             if (category !== 'others' && data.extensions.includes(fileExt)) {
@@ -1908,50 +1914,82 @@ function categorizeFilesByType(files) {
                 break;
             }
         }
-        
+
         // If not categorized, put in others
         if (!categorized) {
             categories.others.size += fileSize;
         }
     });
-    
+
     // Calculate percentages if total size is not zero
     if (totalSize > 0) {
         for (const category in categories) {
             categories[category].percentage = Math.round((categories[category].size / totalSize) * 100);
         }
     }
-    
+
     // Remove the extensions array from the result
     for (const category in categories) {
         delete categories[category].extensions;
     }
-    
+
     return categories;
 }
 
 // Add this new route handler after an existing route
 router.post('/get_storage_stats', (req, res) => {
     try {
-        const { user_email } = req.body;
-        
+        const { user_email, created_by } = req.body;
+
         if (!user_email) {
             return res.status(400).json({ error: 'User email is required' });
         }
-        
+
         // Query all files for this user
         const query = 'SELECT file_name, file_size FROM drive_files WHERE user_email = ?';
-        
+
         db.query(query, [user_email], (err, results) => {
             if (err) {
                 console.error('Error fetching files for storage stats:', err);
                 return res.status(500).json({ error: 'Database error' });
             }
-            
+
+            // Calculate total used storage
+            let usedStorage = 0;
+            results.forEach(file => {
+                usedStorage += parseInt(file.file_size) || 0;
+            });
+
             // Categorize files and calculate stats
             const stats = categorizeFilesByType(results);
-            
-            res.json(stats);
+
+            // Add total used storage to the response
+            const response = {
+                ...stats,
+                usedStorage,
+                totalFiles: results.length
+            };
+
+            // If FULL_DRIVE_LIMIT is defined and not unlimited, calculate percentage used
+            const fullDriveLimit = process.env.FULL_DRIVE_LIMIT || '5GB';
+            const isUnlimited = fullDriveLimit.toLowerCase() === 'unlimited';
+
+            if (!isUnlimited) {
+                let maxStorage = 0;
+                if (fullDriveLimit.endsWith('GB')) {
+                    maxStorage = parseFloat(fullDriveLimit) * 1024 * 1024 * 1024;
+                } else if (fullDriveLimit.endsWith('MB')) {
+                    maxStorage = parseFloat(fullDriveLimit) * 1024 * 1024;
+                } else if (fullDriveLimit.endsWith('TB')) {
+                    maxStorage = parseFloat(fullDriveLimit) * 1024 * 1024 * 1024 * 1024;
+                }
+
+                response.totalStorage = maxStorage;
+                response.percentageUsed = maxStorage > 0 ? (usedStorage / maxStorage) * 100 : 0;
+                response.remainingStorage = maxStorage - usedStorage;
+            }
+
+            res.json(response);
         });
     } catch (error) {
         console.error('Error in get_storage_stats:', error);

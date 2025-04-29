@@ -22,8 +22,8 @@ const share_drive = require('./sub_part/share_drive');
 
 // @shrey11_  start ---- 
 // @shrey11_  start ---- 
-app.use(express.json({ limit: '200mb' }));
-app.use(express.urlencoded({ extended: false, limit: '200mb' }))
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ extended: false, limit: '500mb' }))
 
 app.use(express.json());
 app.use(cors());
