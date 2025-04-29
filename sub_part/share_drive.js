@@ -271,5 +271,110 @@ router.post('/share_with_permission', (req, res) => {
     });
 });
 
+router.post('/fetch-avatars', async (req, res) => {
+    const { file_ids = [], folder_ids = [] } = req.body;
+
+    if (!Array.isArray(file_ids) || !Array.isArray(folder_ids)) {
+        console.log("Invalid input format");
+        return res.status(400).json({ error: 'Invalid input format' });
+    }
+
+    const totalItems = file_ids.length + folder_ids.length;
+    if (totalItems <= 0) {
+        console.log("No items provided to fetch avatars");
+        return res.json({}); // Don't run DB queries
+    }
+
+    try {
+        const allSharedWith = new Set();
+        const sharedMap = {};
+
+        // Process file_ids
+        for (const item of file_ids) {
+            const { id, shared_by } = item || {};
+            if (!id || !shared_by) continue;
+
+            const fileQuery = `SELECT shared_with FROM drive_file_access 
+                             WHERE file_id = ? AND shared_by = ?`;
+            
+            db.query(fileQuery, [id, shared_by], (err, rows) => {
+                if (err) {
+                    console.error('Error fetching file access:', err);
+                    return;
+                }
+
+                const emails = Array.isArray(rows)
+                    ? rows.map(row => row.shared_with).filter(Boolean)
+                    : [];
+
+                sharedMap[id] = emails;
+                emails.forEach(email => allSharedWith.add(email));
+            });
+        }
+
+        // Process folder_ids
+        for (const item of folder_ids) {
+            const { id, shared_by } = item || {};
+            if (!id || !shared_by) continue;
+
+            const folderQuery = `SELECT shared_with FROM drive_file_access 
+                               WHERE folder_id = ? AND shared_by = ?`;
+            
+            db.query(folderQuery, [id, shared_by], (err, rows) => {
+                if (err) {
+                    console.error('Error fetching folder access:', err);
+                    return;
+                }
+
+                const emails = Array.isArray(rows)
+                    ? rows.map(row => row.shared_with).filter(Boolean)
+                    : [];
+
+                sharedMap[id] = emails;
+                emails.forEach(email => allSharedWith.add(email));
+            });
+        }
+
+        const sharedEmails = Array.from(allSharedWith);
+        if (sharedEmails.length === 0) {
+            console.log("No shared users found");
+            return res.json({});
+        }
+
+        const profileQuery = `SELECT user_email, user_name, user_profile_image_base64 
+                            FROM owner WHERE user_email IN (?)`;
+        
+        db.query(profileQuery, [sharedEmails], (err, profiles) => {
+            if (err) {
+                console.error('Error fetching profiles:', err);
+                return res.status(500).json({ error: 'Error fetching user profiles' });
+            }
+
+            const profileMap = {};
+            for (const user of profiles || []) {
+                profileMap[user.user_email] = {
+                    name: user.user_name,
+                    email: user.user_email,
+                    profile_image: user.user_profile_image_base64
+                };
+            }
+
+            const result = {};
+            for (const [id, emails] of Object.entries(sharedMap || {})) {
+                result[id] = Array.isArray(emails)
+                    ? emails.map(email => profileMap[email]).filter(Boolean)
+                    : [];
+            }
+
+            res.json(result);
+        });
+
+    } catch (err) {
+        console.error('Error fetching shared avatars:', err);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+
 
 module.exports = router;
