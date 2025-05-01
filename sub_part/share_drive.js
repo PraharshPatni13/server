@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mysql = require('mysql2');
 require('dotenv').config();
-const {send_shared_item_email} = require('../modules/send_server_email');
+const { send_shared_item_email } = require('../modules/send_server_email');
 
 
 
@@ -234,7 +234,7 @@ router.post('/share_with_permission', (req, res) => {
                     : `SELECT file_name AS name FROM drive_files WHERE file_id = ?`;
 
                 const userQuery = `SELECT user_name FROM owner WHERE user_email = ?`;
-                console.log("item_id.............", item_id,shared_by);
+                console.log("item_id.............", item_id, shared_by);
 
                 db.query(itemQuery, [item_id], (itemErr, itemResults) => {
                     if (itemErr || itemResults.length === 0) {
@@ -253,7 +253,7 @@ router.post('/share_with_permission', (req, res) => {
 
                         const sharedByName = userResults[0].user_name;
                         console.log("sharedByName.............", sharedByName);
-                        
+
                         for (const owner of share_with) {
                             const { email, permission } = owner;
                             console.log("email.............", shared_by, sharedByName, email, item_type, itemName, permission);
@@ -296,7 +296,7 @@ router.post('/fetch-avatars', async (req, res) => {
 
             const fileQuery = `SELECT shared_with FROM drive_file_access 
                              WHERE file_id = ? AND shared_by = ?`;
-            
+
             db.query(fileQuery, [id, shared_by], (err, rows) => {
                 if (err) {
                     console.error('Error fetching file access:', err);
@@ -319,7 +319,7 @@ router.post('/fetch-avatars', async (req, res) => {
 
             const folderQuery = `SELECT shared_with FROM drive_file_access 
                                WHERE folder_id = ? AND shared_by = ?`;
-            
+
             db.query(folderQuery, [id, shared_by], (err, rows) => {
                 if (err) {
                     console.error('Error fetching folder access:', err);
@@ -343,7 +343,7 @@ router.post('/fetch-avatars', async (req, res) => {
 
         const profileQuery = `SELECT user_email, user_name, user_profile_image_base64 
                             FROM owner WHERE user_email IN (?)`;
-        
+
         db.query(profileQuery, [sharedEmails], (err, profiles) => {
             if (err) {
                 console.error('Error fetching profiles:', err);
@@ -374,7 +374,163 @@ router.post('/fetch-avatars', async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+// Serve business profile image by email
+// router.get("/business-profile-image/:user_email", (req, res) => {
+//     const user_email = req.params.user_email;
+//     console.log("user_email", user_email);
 
+//     if (!user_email) {
+//         return res.status(400).send("Missing user email");
+//     }
+
+//     // Get the profile image path from the database
+//     db.query(
+//         "SELECT business_profile_base64 FROM owner WHERE user_email = ?",
+//         [user_email],
+//         (err, results) => {
+//             if (err) {
+//                 console.error("Database error:", err);
+//                 return res.status(500).send("Database error");
+//             }
+
+//             if (results.length === 0) {
+//                 return res.status(404).send("User not found");
+//             }
+
+//             const imagePath = results[0].business_profile_base64;
+
+//             if (!imagePath) {
+//                 return res.status(404).send("No business profile image found");
+//             }
+
+//             // Determine the content type based on the image format
+//             let contentType = "image/jpeg"; // Default
+
+//             if (imagePath.endsWith(".png")) {
+//                 contentType = "image/png";
+//             } else if (imagePath.endsWith(".gif")) {
+//                 contentType = "image/gif";
+//             }
+
+//             // If it's a file path (new format)
+//             if (imagePath.startsWith('/root/')) {
+//                 // Use the same path resolution logic as other endpoints
+//                 const serverRootDir = path.join(__dirname, '..');
+//                 const relativePath = imagePath;
+//                 const fullPath = path.join(serverRootDir, relativePath);
+
+//                 if (fs.existsSync(fullPath)) {
+//                     res.setHeader('Content-Type', contentType);
+//                     return res.sendFile(fullPath);
+//                 }
+
+//                 // Try alternative path as fallback
+//                 const altPath = path.resolve(serverRootDir, `.${relativePath}`);
+
+//                 if (fs.existsSync(altPath)) {
+//                     res.setHeader('Content-Type', contentType);
+//                     return res.sendFile(altPath);
+//                 }
+
+//                 console.error(`Business profile image not found at path: ${fullPath} or ${altPath}`);
+//                 return res.status(404).send(`Image file not found on server`);
+//             }
+//             // If it's base64 (old format)
+//             else if (imagePath.startsWith('data:')) {
+//                 try {
+//                     // Extract content type and base64 data
+//                     const matches = imagePath.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+
+//                     if (!matches || matches.length !== 3) {
+//                         console.error(`Invalid image data format: ${imagePath.substring(0, 30)}...`);
+//                         return res.status(400).send("Invalid image data format");
+//                     }
+
+//                     const base64Data = matches[2];
+//                     const buffer = Buffer.from(base64Data, 'base64');
+
+//                     res.setHeader('Content-Type', matches[1]);
+//                     return res.send(buffer);
+//                 } catch (error) {
+//                     console.error("Error processing base64 image:", error);
+//                     return res.status(500).send("Error processing image");
+//                 }
+//             } else {
+//                 console.error(`Invalid business profile image path format: ${imagePath.substring(0, 30)}...`);
+//                 return res.status(400).send("Invalid image format");
+//             }
+//         }
+//     );
+// });
+
+
+// router.get("/business-profile-image/:user_email", (req, res) => {
+//     const user_email = req.params.user_email;
+//     console.log("user_email", user_email);
+
+//     if (!user_email) {
+//         return res.status(400).send("Missing user email");
+//     }
+
+//     const sql = `SELECT * FROM drive_file_access WHERE shared_by = ?`;
+//     db.query(sql, [user_email], (err, results) => {
+//         if (err) {
+//             console.error("Database error:", err);
+//             return res.status(500).send("Database error");
+//         }
+//         const shared_with_emails = results.map(row => row.shared_with);
+
+//         if (shared_with_emails.length === 0) {
+//             return res.status(200).json([]);
+//         }
+//         const placeholders = shared_with_emails.map(() => '?').join(',');
+//         const ownerQuery = `SELECT user_email, user_profile_image_base64 FROM owner WHERE user_email IN (${placeholders})`;
+//         db.query(ownerQuery, [shared_with_emails], (err, results) => {
+//             if (err) {
+//                 console.error("Database error:", err);
+//                 return res.status(500).send("Database error");
+//             }
+//             console.log("results", results);
+//             res.status(200).json(results);
+//         })
+//     });
+// });
+
+router.get("/business-profile-image/:user_email", (req, res) => {
+    const user_email = req.params.user_email;
+    console.log("user_email", user_email);
+
+    if (!user_email) {
+        return res.status(400).send("Missing user email");
+    }
+
+    // ✅ Only distinct shared_with emails
+    const sql = `SELECT DISTINCT shared_with FROM drive_file_access WHERE shared_by = ?`;
+    db.query(sql, [user_email], (err, results) => {
+        if (err) {
+            console.error("Database error:", err);
+            return res.status(500).send("Database error");
+        }
+
+        const shared_with_emails = results.map(row => row.shared_with);
+
+        if (shared_with_emails.length === 0) {
+            return res.status(200).json([]);
+        }
+
+        const placeholders = shared_with_emails.map(() => '?').join(',');
+        const ownerQuery = `SELECT user_email, user_profile_image_base64 FROM owner WHERE user_email IN (${placeholders})`;
+
+        db.query(ownerQuery, shared_with_emails, (err, results) => {
+            if (err) {
+                console.error("Database error:", err);
+                return res.status(500).send("Database error");
+            }
+            console.log("results", results);
+            res.status(200).json(results);
+        });
+    });
+});
 
 
 module.exports = router;

@@ -1343,6 +1343,7 @@ router.post("/update-business-profile-image", (req, res) => {
 // Serve business profile image by email
 router.get("/business-profile-image/:user_email", (req, res) => {
   const user_email = req.params.user_email;
+  console.log("user_email", user_email);
 
   if (!user_email) {
     return res.status(400).send("Missing user email");
