@@ -6,7 +6,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
-const shrey11_ = require('./sub_part/other_rout_shrey_11');
+const shrey11_ = require('./sub_part/shrey_11.js');
 const praharsh_routes = require("./sub_part/praharsh_routes");
 const drive_rout = require('./sub_part/Drive_rout.js');
 const adminRoutes = require('./sub_part/Admin_rout');

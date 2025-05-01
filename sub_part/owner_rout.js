@@ -27,7 +27,7 @@ const {
   get_otp,
   clear_otp,
 } = require("./../modules/OTP_generate");
-const { route } = require("./other_rout_shrey_11");
+const { route } = require("./shrey_11");
 const JWT_SECRET_KEY = "Jwt_key_for_photography_website";
 require('dotenv').config();
 function create_jwt_token(user_email, user_name) {
