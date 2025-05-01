@@ -352,7 +352,7 @@ router.get('/folder/:folderId/contents', (req, res) => {
     }
 
     console.log(`Getting contents for folder ID: ${folderId} for user: ${user_email}`);
-
+    
     // Step 1: Get child folder IDs from drive_folder_structure
     const childFolderQuery = `SELECT child_folder_id FROM drive_folder_structure WHERE parent_folder_id = ?`;
 
@@ -388,7 +388,7 @@ router.get('/folder/:folderId/contents', (req, res) => {
             new Promise((resolve, reject) => {
                 db.query(fileQuery, [folderId, user_email], (err, files) => {
                     if (err) reject(err);
-                    else resolve(files);
+                    else resolve(files);    
                 });
             })
         ])
