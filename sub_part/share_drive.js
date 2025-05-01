@@ -40,7 +40,6 @@ router.post('/share_drive_by_me', (req, res) => {
 
 router.post('/share_drive_with_me', (req, res) => {
     const { user_email } = req.body;
-    console.log("Requested shared items for user_email:", user_email);
 
     // Step 1: Fetch folder access
     const folderAccessSql = `

@@ -351,8 +351,6 @@ router.get('/folder/:folderId/contents', (req, res) => {
         return res.status(400).json({ error: 'Missing required parameters: folderId, user_email, or created_by' });
     }
 
-    console.log(`Getting contents for folder ID: ${folderId} for user: ${user_email}`);
-    
     // Step 1: Get child folder IDs from drive_folder_structure
     const childFolderQuery = `SELECT child_folder_id FROM drive_folder_structure WHERE parent_folder_id = ?`;
 
@@ -369,11 +367,9 @@ router.get('/folder/:folderId/contents', (req, res) => {
 
         const childFolderIds = childFolderIdsResult.map(row => row.child_folder_id);
 
-        // Step 2: Get folder details for child folder IDs
         const folderQuery = `SELECT * FROM drive_folders WHERE folder_id IN (?) AND created_by = ?`;
         const fileQuery = `SELECT * FROM drive_files WHERE parent_folder_id = ? AND user_email = ?`;
 
-        // Execute both queries in parallel
         Promise.all([
             new Promise((resolve, reject) => {
                 if (childFolderIds.length === 0) {
@@ -393,7 +389,6 @@ router.get('/folder/:folderId/contents', (req, res) => {
             })
         ])
             .then(([folders, files]) => {
-                // Return both folders and files
                 res.status(200).json({
                     success: true,
                     folders: folders,
@@ -2103,6 +2098,19 @@ router.post('/get_storage_stats', (req, res) => {
         console.error('Error in get_storage_stats:', error);
         res.status(500).json({ error: 'Server error' });
     }
+});
+
+router.post("/get_file_folder_details", (req, res) => {
+    const { type,id } = req.body;
+    let query = "";
+    if(type == "folder"){
+        query = `SELECT * FROM drive_folders WHERE folder_id = ?`;
+    }else if(type == "file"){
+        query = `SELECT * FROM drive_files WHERE file_id = ?`;
+    }
+    db.query(query, [id], (err, results) => {
+        res.json(results);
+    });
 });
 
 module.exports = router;
