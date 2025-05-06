@@ -2244,6 +2244,175 @@ router.post("/add-equipment-request", (req, res) => {
 //   });
 // });
 
+// router.post("/add-service-request", (req, res) => {
+//   console.log("service request at server side", req.body);
+
+//   const {
+//     event_name,
+//     sender_email,
+//     receiver_email,
+//     service_name,
+//     service_price_per_day,
+//     service_description,
+//     total_amount,
+//     services_id,
+//     start_date,
+//     end_date,
+//     location,
+//     days_required,
+//     schedule,
+//     event_request_type
+//   } = req.body;
+
+//   if (!event_name || !sender_email || !receiver_email || !Array.isArray(schedule)) {
+//     return res.status(400).json({ error: "Missing or invalid required fields" });
+//   }
+
+//   const formatDate = (dateString) => {
+//     const date = new Date(dateString);
+//     return date.toISOString().slice(0, 19).replace('T', ' ');
+//   };
+
+//   const insertValues = [];
+//   const placeholders = [];
+
+//   schedule.forEach((day) => {
+//     placeholders.push(`(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`);
+//     insertValues.push(
+//       event_request_type || "service",
+//       event_name,
+//       service_name,
+//       service_price_per_day,
+//       service_description,
+//       sender_email,
+//       receiver_email,
+//       total_amount,
+//       day.description || "",
+//       services_id,
+//       formatDate(day.start_date),
+//       formatDate(day.end_date),
+//       "Pending",
+//       day.location,
+//       days_required
+//     );
+//   });
+
+//   const eventInsertQuery = `
+//     INSERT INTO event_request (
+//       event_request_type, 
+//       event_name,
+//       service_name, 
+//       service_price_per_day, 
+//       service_description, 
+//       sender_email, 
+//       receiver_email, 
+//       total_amount,
+//       requirements,
+//       services_id,
+//       start_date,
+//       end_date,
+//       event_status,
+//       location,
+//       days_required,
+//       time_stamp
+//     ) VALUES ${placeholders.join(", ")}
+//   `;
+
+//   db.query(eventInsertQuery, insertValues, (err, result) => {
+//     if (err) {
+//       console.error("Error inserting event requests:", err);
+//       return res.status(500).json({ error: "Error inserting event requests" });
+//     }
+
+//     const insertedIds = [];
+//     for (let i = 0; i < result.affectedRows; i++) {
+//       insertedIds.push(result.insertId + i);
+//     }
+
+//     // Insert into notifications_pes
+//     const notificationQuery = `
+//       INSERT INTO notifications_pes (
+//         notification_type,
+//         notification_name,
+//         user_email,
+//         location,
+//         days_required,
+//         sender_email,
+//         created_at
+//       ) VALUES (?, ?, ?, ?, ?, ?, NOW())
+//     `;
+
+//     const notificationValues = [
+//       "service",
+//       service_name,
+//       receiver_email,
+//       location,
+//       `${days_required} days`,
+//       sender_email
+//     ];
+
+//     db.query(notificationQuery, notificationValues, (notifyErr, notifyResult) => {
+//       if (notifyErr) {
+//         console.error("Error inserting notification:", notifyErr);
+//         return res.status(500).json({ error: "Error inserting notification" });
+//       }
+
+//       // Fetch notification to emit
+//       const insertedNotifyId = notifyResult.insertId;
+//       const fetchQuery = `SELECT * FROM notifications_pes WHERE id = ?`;
+
+//       db.query(fetchQuery, [insertedNotifyId], (fetchErr, fetchResult) => {
+//         if (fetchErr) {
+//           console.error("Error fetching notification:", fetchErr);
+//           return res.status(500).json({ error: "Error fetching notification" });
+//         }
+
+//         // Emit notification
+//         req.io.emit(`service_notification_${receiver_email}`, {
+//           all_data: fetchResult[0],
+//           type: fetchResult[0].notification_type
+//         });
+
+//         // Now insert into multi_day_services
+//         const multiDayQuery = `
+//           INSERT INTO multi_day_services (
+//             start_date,
+//             end_date,
+//             sender_email,
+//             receiver_email,
+//             event_req_type,
+//             event_ids,
+//             service_id
+//           ) VALUES (?, ?, ?, ?, ?, ?, ?)
+//         `;
+
+//         const multiDayValues = [
+//           formatDate(start_date),
+//           formatDate(end_date),
+//           sender_email,
+//           receiver_email,
+//           event_request_type || "service",
+//           JSON.stringify(insertedIds),
+//           services_id
+//         ];
+
+//         db.query(multiDayQuery, multiDayValues, (multiErr, multiRes) => {
+//           if (multiErr) {
+//             console.error("Error inserting into multi_day_services:", multiErr);
+//             return res.status(500).json({ error: "Error inserting into multi_day_services" });
+//           }
+
+//           res.status(201).json({
+//             message: "Service request, notification, and multi-day record added successfully",
+//             inserted_event_ids: insertedIds,
+//             notification_id: insertedNotifyId,
+//             multi_day_id: multiRes.insertId
+//           });
+//         });
+//       });
+//     });
+//   });
+// });
 router.post("/add-service-request", (req, res) => {
   console.log("service request at server side", req.body);
 
@@ -2261,7 +2430,9 @@ router.post("/add-service-request", (req, res) => {
     location,
     days_required,
     schedule,
-    event_request_type
+    event_request_type,
+    location_link, // New field
+    title // New field
   } = req.body;
 
   if (!event_name || !sender_email || !receiver_email || !Array.isArray(schedule)) {
@@ -2276,24 +2447,30 @@ router.post("/add-service-request", (req, res) => {
   const insertValues = [];
   const placeholders = [];
 
-  schedule.forEach((day) => {
-    placeholders.push(`(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`);
+  schedule.forEach((day, index) => {
+    // For each day, insert a separate row with the description and day_number
+    placeholders.push(`(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+
     insertValues.push(
-      event_request_type || "service",
+      event_request_type || "service", // Default event_request_type
       event_name,
       service_name,
       service_price_per_day,
-      service_description,
+      day.service_description || service_description, // Day-specific description
       sender_email,
       receiver_email,
       total_amount,
-      day.description || "",
+      day.description || "", // Day-specific requirement description
       services_id,
       formatDate(day.start_date),
       formatDate(day.end_date),
-      "Pending",
-      day.location,
-      days_required
+      "Pending", // Default event_status
+      day.location || location, // Day location or default location
+      days_required,
+      location_link || "", // location_link field
+      title || "", // title field
+      index + 1, // day_number field (1-based index)
+      day.time_stamp || new Date() // timestamp of the day
     );
   });
 
@@ -2314,6 +2491,9 @@ router.post("/add-service-request", (req, res) => {
       event_status,
       location,
       days_required,
+      location_link, 
+      title,
+      day_number,
       time_stamp
     ) VALUES ${placeholders.join(", ")}
   `;
