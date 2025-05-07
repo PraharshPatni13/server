@@ -165,44 +165,44 @@ router.post("/owner_drive/get_folder_preview", (req, res) => {
   });
 });
 
-router.post("/add-team-members", (req, res) => {
-  const { user_email, team_members, event_id } = req.body;
+// router.post("/add-team-members", (req, res) => {
+//   const { user_email, team_members, event_id } = req.body;
 
-  // Validate input
-  if (
-    !user_email ||
-    !Array.isArray(team_members) ||
-    team_members.length === 0 ||
-    !event_id
-  ) {
-    return res.status(400).json({ message: "Invalid input data" });
-  }
+//   // Validate input
+//   if (
+//     !user_email ||
+//     !Array.isArray(team_members) ||
+//     team_members.length === 0 ||
+//     !event_id
+//   ) {
+//     return res.status(400).json({ message: "Invalid input data" });
+//   }
 
-  // Extract only member IDs
-  const assignedMemberIds = team_members.map((member) => member.member_id);
+//   // Extract only member IDs
+//   const assignedMemberIds = team_members.map((member) => member.member_id);
 
-  // Convert to JSON string for storage
-  const assignedMembersJson = JSON.stringify(assignedMemberIds);
+//   // Convert to JSON string for storage
+//   const assignedMembersJson = JSON.stringify(assignedMemberIds);
 
-  const sql = `
-    UPDATE event_request
-    SET assigned_team_member = ?, event_status = 'Accepted'
-    WHERE receiver_email = ? AND id = ?
-  `;
+//   const sql = `
+//     UPDATE event_request
+//     SET assigned_team_member = ?, event_status = 'Accepted'
+//     WHERE receiver_email = ? AND id = ?
+//   `;
 
-  db.query(sql, [assignedMembersJson, user_email, event_id], (err, result) => {
-    if (err) {
-      console.error("Error updating team members:", err);
-      return res.status(500).json({ message: "Failed to assign team members" });
-    }
+//   db.query(sql, [assignedMembersJson, user_email, event_id], (err, result) => {
+//     if (err) {
+//       console.error("Error updating team members:", err);
+//       return res.status(500).json({ message: "Failed to assign team members" });
+//     }
 
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: "No matching event found." });
-    }
+//     if (result.affectedRows === 0) {
+//       return res.status(404).json({ message: "No matching event found." });
+//     }
 
-    res.json({ message: "Team members assigned successfully" });
-  });
-});
+//     res.json({ message: "Team members assigned successfully" });
+//   });
+// });
 
 
 router.post("/request-update-status", (req, res) => {

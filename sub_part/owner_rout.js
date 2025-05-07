@@ -13,6 +13,7 @@ if (!fs.existsSync(rootDirectory)) {
 
 const router = express.Router();
 const jwt = require("jsonwebtoken");
+const { send_team_event_confirmation_email } = require("./../modules/send_server_email")
 
 const {
   server_request_mode,
@@ -77,6 +78,75 @@ router.post("/add_owner", (req, res) => {
     });
   });
 });
+
+async function notifyOwners(user_email, title, assignments) {
+  console.log("Assigned members:", assignments);
+
+  try {
+    for (const member of assignments) {
+      const {
+        member_id,
+        assigned_by_email,
+        role_in_event,
+        start_date,
+        end_date,
+        price_in_event,
+        event_id
+      } = member;
+
+      // Get event location inside the loop for specific event_id
+      const [eventLocationRow] = await db.promise().execute(
+        `SELECT location FROM event_request WHERE id = ?`,
+        [event_id]
+      );
+      const event_location = eventLocationRow?.[0]?.location || "N/A";
+
+      // Get team member's owner details
+      const [ownerRow] = await db.promise().execute(
+        `SELECT team_member_email, member_name FROM team_member WHERE member_id = ?`,
+        [member_id]
+      );
+
+      if (!ownerRow || ownerRow.length === 0) {
+        console.warn(`No owner found for member_id ${member_id}`);
+        continue;
+      }
+
+      const { team_member_email, owner_name } = ownerRow[0];
+
+      // Get business name using owner's email
+      const [businessRow] = await db.promise().execute(
+        `SELECT business_name FROM owner WHERE user_email = ?`,
+        [user_email]
+      );
+
+      const business_name = businessRow?.[0]?.business_name || "Your Business";
+
+      // Log before sending
+      console.log(`Preparing to send email to ${team_member_email} for role ${role_in_event}`);
+
+      // Send the email with individual params
+      await send_team_event_confirmation_email(
+        team_member_email,            // member_email
+        owner_name,             // member_name
+        event_id,
+        title,                  // event_title
+        start_date,
+        end_date,
+        event_location,
+        assigned_by_email,      // owner_name
+        role_in_event || "Unknown",
+        business_name,
+        price_in_event || 0
+      );
+
+      console.log(`✅ Email sent to ${team_member_email}`);
+    }
+  } catch (err) {
+    console.error("❌ Failed to notify owners:", err);
+  }
+}
+
 
 router.post("/login", (req, res) => {
   const { user_email, user_password } = req.body;
@@ -2125,305 +2195,6 @@ router.post("/add-equipment-request", (req, res) => {
   });
 });
 
-// Add service request
-// router.post("/add-service-request", (req, res) => {
-//   console.log("service request at server side", req.body.receiver_email);
-//   const {
-//     event_name,
-//     sender_email,
-//     receiver_email,
-//     service_name,
-//     service_price,
-//     description,
-//     total_amount,
-//     requirements,
-//     service_id,
-//     start_date,
-//     end_date,
-//     location,
-//     days_required
-//   } = req.body;
-
-//   if (!event_name || !sender_email || !receiver_email) {
-//     return res.status(400).json({ error: "Missing required fields" });
-//   }
-
-//   const formatDate = (dateString) => {
-//     const date = new Date(dateString);
-//     return date.toISOString().slice(0, 19).replace('T', ' ');
-//   };
-
-//   const formattedStartDate = formatDate(start_date);
-//   const formattedEndDate = formatDate(end_date);
-
-
-//   function calculateDays(startDate, endDate) {
-//     if (!startDate || !endDate) return "N/A";
-
-//     const start = new Date(startDate);
-//     const end = new Date(endDate);
-
-//     const diffTime = end - start; // Difference in milliseconds
-//     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); // Convert to days
-
-//     return diffDays > 0 ? `${diffDays} days` : "0 days";
-//   }
-
-//   const calculatedDaysRequired = calculateDays(start_date, end_date);
-
-//   const query = `
-//   INSERT INTO event_request (
-//     event_request_type, 
-//     event_name,
-//     service_name, 
-//     service_price_per_day, 
-//     service_description, 
-//     sender_email, 
-//     receiver_email, 
-//     total_amount,
-//     requirements,
-//     services_id,
-//     start_date,
-//     end_date,
-//     event_status,
-//     location,
-//     days_required,
-//     time_stamp
-//   )
-//   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, Now())
-// `;
-
-//   const values = [
-//     'service',
-//     event_name,
-//     service_name,
-//     service_price,
-//     description,
-//     sender_email,
-//     receiver_email,
-//     total_amount,
-//     requirements,
-//     service_id,
-//     formattedStartDate,
-//     formattedEndDate,
-//     'Pending',
-//     location,
-//     days_required
-//   ];
-
-//   db.query(query, values, (err, result) => {
-//     if (err) {
-//       console.error("Error adding service request:", err);
-//       return res.status(500).json({ error: "Error adding service request" });
-//     }
-
-//     const insertQuery = `insert into notifications_pes (notification_type,notification_name,user_email,location,days_required,sender_email) values (?,?,?,?,?,?)`;
-//     const notifications_values = ["service", service_name, receiver_email, location, calculatedDaysRequired, sender_email];
-
-//     db.query(insertQuery, notifications_values, (insertErr, insertResult) => {
-//       if (insertErr) {
-//         console.error("Error adding notification:", insertErr);
-//         return res.status(500).json({ error: "Error adding notification" });
-//       }
-//       const insertedId = insertResult.insertId;
-
-//       const fetchQuery = `select * from notifications_pes where id = ?`;
-//       db.query(fetchQuery, [insertedId], (err, fetchResult) => {
-//         if (err) {
-//           console.error("Error fetching service request:", err);
-//           return res.status(500).json({ error: "Error fetching service request" });
-//         }
-//         req.io.emit(`service_notification_${receiver_email}`, { all_data: fetchResult[0], type: fetchResult[0].notification_type });
-//       });
-
-//       res.status(201).json({
-//         message: "Service request added successfully",
-//         request_id: insertedId,
-//       });
-//     });
-//   });
-// });
-
-// router.post("/add-service-request", (req, res) => {
-//   console.log("service request at server side", req.body);
-
-//   const {
-//     event_name,
-//     sender_email,
-//     receiver_email,
-//     service_name,
-//     service_price_per_day,
-//     service_description,
-//     total_amount,
-//     services_id,
-//     start_date,
-//     end_date,
-//     location,
-//     days_required,
-//     schedule,
-//     event_request_type,
-//     location_link, // New field
-//     title // New field
-//   } = req.body;
-
-//   if (!event_name || !sender_email || !receiver_email || !Array.isArray(schedule)) {
-//     return res.status(400).json({ error: "Missing or invalid required fields" });
-//   }
-
-//   const formatDate = (dateString) => {
-//     const date = new Date(dateString);
-//     return date.toISOString().slice(0, 19).replace('T', ' ');
-//   };
-
-//   const insertValues = [];
-//   const placeholders = [];
-
-//   schedule.forEach((day, index) => {
-//     // For each day, insert a separate row with the description and day_number
-//     placeholders.push(`(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-
-//     insertValues.push(
-//       event_request_type || "service", // Default event_request_type
-//       event_name,
-//       service_name,
-//       service_price_per_day,
-//       day.service_description || service_description, // Day-specific description
-//       sender_email,
-//       receiver_email,
-//       total_amount,
-//       day.description || "", // Day-specific requirement description
-//       services_id,
-//       formatDate(day.start_date),
-//       formatDate(day.end_date),
-//       "Pending", // Default event_status
-//       day.location || location, // Day location or default location
-//       days_required,
-//       location_link || "", // location_link field
-//       title || "", // title field
-//       index + 1, // day_number field (1-based index)
-//       day.time_stamp || new Date() // timestamp of the day
-//     );
-//   });
-
-//   const eventInsertQuery = `
-//     INSERT INTO event_request (
-//       event_request_type, 
-//       event_name,
-//       service_name, 
-//       service_price_per_day, 
-//       service_description, 
-//       sender_email, 
-//       receiver_email, 
-//       total_amount,
-//       requirements,
-//       services_id,
-//       start_date,
-//       end_date,
-//       event_status,
-//       location,
-//       days_required,
-//       location_link, 
-//       title,
-//       day_number,
-//       time_stamp
-//     ) VALUES ${placeholders.join(", ")}
-//   `;
-
-//   db.query(eventInsertQuery, insertValues, (err, result) => {
-//     if (err) {
-//       console.error("Error inserting event requests:", err);
-//       return res.status(500).json({ error: "Error inserting event requests" });
-//     }
-
-//     const insertedIds = [];
-//     for (let i = 0; i < result.affectedRows; i++) {
-//       insertedIds.push(result.insertId + i);
-//     }
-
-//     // Insert into notifications_pes
-//     const notificationQuery = `
-//       INSERT INTO notifications_pes (
-//         notification_type,
-//         notification_name,
-//         user_email,
-//         location,
-//         days_required,
-//         sender_email,
-//         created_at
-//       ) VALUES (?, ?, ?, ?, ?, ?, NOW())
-//     `;
-
-//     const notificationValues = [
-//       "service",
-//       service_name,
-//       receiver_email,
-//       location,
-//       `${days_required} days`,
-//       sender_email
-//     ];
-
-//     db.query(notificationQuery, notificationValues, (notifyErr, notifyResult) => {
-//       if (notifyErr) {
-//         console.error("Error inserting notification:", notifyErr);
-//         return res.status(500).json({ error: "Error inserting notification" });
-//       }
-
-//       // Fetch notification to emit
-//       const insertedNotifyId = notifyResult.insertId;
-//       const fetchQuery = `SELECT * FROM notifications_pes WHERE id = ?`;
-
-//       db.query(fetchQuery, [insertedNotifyId], (fetchErr, fetchResult) => {
-//         if (fetchErr) {
-//           console.error("Error fetching notification:", fetchErr);
-//           return res.status(500).json({ error: "Error fetching notification" });
-//         }
-
-//         // Emit notification
-//         req.io.emit(`service_notification_${receiver_email}`, {
-//           all_data: fetchResult[0],
-//           type: fetchResult[0].notification_type
-//         });
-
-//         // Now insert into multi_day_services
-//         const multiDayQuery = `
-//           INSERT INTO multi_day_services (
-//             start_date,
-//             end_date,
-//             sender_email,
-//             receiver_email,
-//             event_req_type,
-//             event_ids,
-//             service_id
-//           ) VALUES (?, ?, ?, ?, ?, ?, ?)
-//         `;
-
-//         const multiDayValues = [
-//           formatDate(start_date),
-//           formatDate(end_date),
-//           sender_email,
-//           receiver_email,
-//           event_request_type || "service",
-//           JSON.stringify(insertedIds),
-//           services_id
-//         ];
-
-//         db.query(multiDayQuery, multiDayValues, (multiErr, multiRes) => {
-//           if (multiErr) {
-//             console.error("Error inserting into multi_day_services:", multiErr);
-//             return res.status(500).json({ error: "Error inserting into multi_day_services" });
-//           }
-
-//           res.status(201).json({
-//             message: "Service request, notification, and multi-day record added successfully",
-//             inserted_event_ids: insertedIds,
-//             notification_id: insertedNotifyId,
-//             multi_day_id: multiRes.insertId
-//           });
-//         });
-//       });
-//     });
-//   });
-// });
 router.post("/add-service-request", (req, res) => {
   console.log("service request at server side", req.body);
 
@@ -2652,6 +2423,93 @@ router.get("/get-equipment-details-by/:receiver_email", (req, res) => {
       });
     });
   });
+});
+
+router.post('/add_team_member_for_service', function (req, res) {
+  const { user_email, title, start, end, description, backgroundColor, teamAssignments } = req.body;
+
+  if (!title || !start || !end || !user_email) {
+    return res.status(400).json({ error: "Title, start, end, and user_email are required." });
+  }
+
+  if (!Array.isArray(teamAssignments) || teamAssignments.length === 0) {
+    return res.status(400).json({ error: "teamAssignments must be a non-empty array." });
+  }
+
+  const isValid = teamAssignments.every((member) => {
+    return member.member_id && member.assigned_by_email && member.start_date && member.end_date;
+  });
+
+  if (!isValid) {
+    return res.status(400).json({ error: "Each team assignment must include member_id, assigned_by_email, start_date, and end_date." });
+  }
+
+  db.execute(
+    `INSERT INTO events (title, start, end, description, backgroundColor, user_email, created_at, updated_at, assigned_members)
+     VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW(), NULL)`,
+    [
+      title,
+      start,
+      end,
+      description || null,
+      backgroundColor || "#3788d8",
+      user_email
+    ],
+    function (err, eventResult) {
+      if (err) {
+        console.error("Error inserting event:", err);
+        return res.status(500).json({ error: "Failed to add event." });
+      }
+
+      const event_id = eventResult.insertId;
+      let completed = 0;
+      let hasError = false;
+
+      const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        return date.toISOString().slice(0, 19).replace('T', ' ');
+      };
+
+      teamAssignments.forEach((member) => {
+        db.execute(
+          `INSERT INTO event_team_member 
+          (event_id, member_id, assigned_by_email, start_date, end_date, role_in_event, confirmation_status, confirmation_date, calender_id, price_in_event)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            member.event_id,
+            member.member_id,
+            member.assigned_by_email,
+            formatDate(member.start_date),
+            formatDate(member.end_date),
+            member.role_in_event || "Unknown",
+            "pending",
+            null,
+            null,
+            member.price_in_event || 0
+          ],
+          function (err2) {
+            if (hasError) return;
+            if (err2) {
+              hasError = true;
+              console.error("Error inserting team member:", err2);
+              return res.status(500).json({ error: "Failed to add team members." });
+            }
+
+            completed++;
+            if (completed === teamAssignments.length) {
+              // All inserts completed successfully, now send emails
+              notifyOwners(user_email, title, teamAssignments).then(() => {
+                res.status(201).json({ message: "Event and team members added successfully, notifications sent." });
+              }).catch(err => {
+                console.error("Error sending notifications:", err);
+                res.status(201).json({ message: "Event and team members added, but failed to send some notifications." });
+              });
+            }
+          }
+        );
+      });
+    }
+  );
 });
 
 router.get("/get_received_service_requests/:receiver_email", (req, res) => {

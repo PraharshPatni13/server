@@ -179,7 +179,7 @@ async function send_owner_notification_email(owner_email, owner_name, member_nam
     }
 }
 
-async function send_team_event_confirmation_email(member_email, member_name, event_id, event_title, event_start, event_end, event_location, owner_name, business_name) {
+async function send_team_event_confirmation_email(member_email, member_name, event_id, event_title, event_start, event_end, event_location, owner_name, assigned_role, business_name, payment_amount) {
     try {
         // Load the event confirmation template from file
         let template;
@@ -191,6 +191,7 @@ async function send_team_event_confirmation_email(member_email, member_name, eve
             // Fallback inline HTML template
             template = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
+                    <h2> Payment : {{payment_amount}} </h2>
                     <h2 style="color: #333;">Event Assignment Confirmation Needed</h2>
                     <p>Hello {{member_name}},</p>
                     
@@ -238,8 +239,10 @@ async function send_team_event_confirmation_email(member_email, member_name, eve
             .replace(/{{event_location}}/g, event_location || "Not specified")
             .replace(/{{owner_name}}/g, owner_name)
             .replace(/{{business_name}}/g, business_name)
+            .replace(/{{assigned_role}}/g, assigned_role)
             .replace(/{{accept_url}}/g, acceptUrl)
             .replace(/{{reject_url}}/g, rejectUrl);
+
 
         await send_email(
             member_email,
@@ -255,7 +258,7 @@ async function send_team_event_confirmation_email(member_email, member_name, eve
 }
 
 // drive share email
-async function send_shared_item_email(shared_by,sharedByName, shared_with_email, item_type, item_name, permission) {
+async function send_shared_item_email(shared_by, sharedByName, shared_with_email, item_type, item_name, permission) {
     try {
         // Load the shared item template
         let template;
@@ -334,6 +337,8 @@ async function notifyEventConfirmationUpdate(io, event_id, receiver_email) {
         return false;
     }
 }
+
+
 
 module.exports = {
     send_welcome_page,
