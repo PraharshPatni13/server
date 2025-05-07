@@ -370,5 +370,164 @@ router.get('/notifications_for_test', async (req, res) => {
   }
 });
 
-// Module exports for service registry integration
+
+router.post("/get_info_for_event", async (req, res) => {
+  const { event_id } = req.body;
+
+  try {
+    const getServiceEventIds = () =>
+      new Promise((resolve, reject) => {
+        db.query("SELECT event_ids FROM multi_day_services", (err, results) => {
+          if (err) return reject(err);
+
+          const allValidIds = new Set();
+          results.forEach(row => {
+            try {
+              const ids = JSON.parse(row.event_ids);
+              if (Array.isArray(ids)) {
+                ids.forEach(id => allValidIds.add(id));
+              }
+            } catch (e) {
+              console.warn("Invalid JSON in event_ids:", row.event_ids);
+            }
+          });
+
+          resolve(allValidIds);
+        });
+      });
+
+    const allValidIds = await getServiceEventIds();
+
+    const validEventIds = event_id
+      .map(item => item.id)
+      .filter(id => allValidIds.has(id));
+
+    if (validEventIds.length === 0) {
+      return res.json({ message: "No valid event IDs found", data: [] });
+    }
+
+    const results = await new Promise((resolve, reject) => {
+      const query = `SELECT * FROM event_request WHERE id IN (?)`;
+      db.query(query, [validEventIds], (err, result) => {
+        if (err) return reject(err);
+        resolve(result);
+      });
+    });
+
+    res.json({ message: "All OK", data: results });
+
+  } catch (error) {
+    console.error("Error in /get_info_for_event:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 module.exports = router;
+
+[
+  {
+      "id": 90,
+      "event_request_type": "service",
+      "package_name": null,
+      "service": null,
+      "description": null,
+      "price": null,
+      "event_name": "service",
+      "equipment_name": null,
+      "equipment_company": null,
+      "equipment_type": null,
+      "equipment_description": null,
+      "equipment_price_per_day": null,
+      "location": "test ",
+      "requirements": "",
+      "days_required": 3,
+      "total_amount": "2568.00",
+      "sender_email": "alice.johnson@example.com",
+      "receiver_email": "shreypatel959@gmail.com",
+      "event_status": "Pending",
+      "reason": null,
+      "start_date": "2025-05-06T06:11:48.000Z",
+      "end_date": "2025-05-07T06:11:48.000Z",
+      "assigned_team_member": null,
+      "package_id": null,
+      "equipment_id": null,
+      "service_name": "aesthetic photography",
+      "service_description": "shrey",
+      "service_price_per_day": "856.00",
+      "services_id": 37,
+      "time_stamp": "2025-05-06T11:42:37.000Z",
+      "title": "shrey ",
+      "location_link": "test ",
+      "day_number": 1
+  },
+  {
+      "id": 91,
+      "event_request_type": "service",
+      "package_name": null,
+      "service": null,
+      "description": null,
+      "price": null,
+      "event_name": "service",
+      "equipment_name": null,
+      "equipment_company": null,
+      "equipment_type": null,
+      "equipment_description": null,
+      "equipment_price_per_day": null,
+      "location": "test ",
+      "requirements": "",
+      "days_required": 3,
+      "total_amount": "2568.00",
+      "sender_email": "alice.johnson@example.com",
+      "receiver_email": "shreypatel959@gmail.com",
+      "event_status": "Pending",
+      "reason": null,
+      "start_date": "2025-05-07T06:11:48.000Z",
+      "end_date": "2025-05-08T06:11:48.000Z",
+      "assigned_team_member": null,
+      "package_id": null,
+      "equipment_id": null,
+      "service_name": "aesthetic photography",
+      "service_description": "shrey",
+      "service_price_per_day": "856.00",
+      "services_id": 37,
+      "time_stamp": "2025-05-06T11:42:37.000Z",
+      "title": "shrey ",
+      "location_link": "test ",
+      "day_number": 2
+  },
+  {
+      "id": 92,
+      "event_request_type": "service",
+      "package_name": null,
+      "service": null,
+      "description": null,
+      "price": null,
+      "event_name": "service",
+      "equipment_name": null,
+      "equipment_company": null,
+      "equipment_type": null,
+      "equipment_description": null,
+      "equipment_price_per_day": null,
+      "location": "test ",
+      "requirements": "",
+      "days_required": 3,
+      "total_amount": "2568.00",
+      "sender_email": "alice.johnson@example.com",
+      "receiver_email": "shreypatel959@gmail.com",
+      "event_status": "Pending",
+      "reason": null,
+      "start_date": "2025-05-08T06:11:48.000Z",
+      "end_date": "2025-05-09T06:11:48.000Z",
+      "assigned_team_member": null,
+      "package_id": null,
+      "equipment_id": null,
+      "service_name": "aesthetic photography",
+      "service_description": "shrey",
+      "service_price_per_day": "856.00",
+      "services_id": 37,
+      "time_stamp": "2025-05-06T11:42:37.000Z",
+      "title": "shrey ",
+      "location_link": "test ",
+      "day_number": 3
+  }
+]
