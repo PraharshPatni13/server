@@ -80,7 +80,8 @@ router.post("/add_owner", (req, res) => {
 });
 
 async function notifyOwners(user_email, title, assignments) {
-  console.log("Assigned members:", assignments);
+  console.log("Assigned members:", assignments, user_email, title);
+
 
   try {
     for (const member of assignments) {
@@ -112,7 +113,7 @@ async function notifyOwners(user_email, title, assignments) {
         continue;
       }
 
-      const { team_member_email, owner_name } = ownerRow[0];
+      const { team_member_email, member_name } = ownerRow[0];
 
       // Get business name using owner's email
       const [businessRow] = await db.promise().execute(
@@ -121,20 +122,32 @@ async function notifyOwners(user_email, title, assignments) {
       );
 
       const business_name = businessRow?.[0]?.business_name || "Your Business";
-
-      // Log before sending
-      console.log(`Preparing to send email to ${team_member_email} for role ${role_in_event}`);
-
-      // Send the email with individual params
-      await send_team_event_confirmation_email(
+      console.log("business name ", business_name);
+      console.log("all data to send ",
         team_member_email,            // member_email
-        owner_name,             // member_name
+        member_name,             // member_name
         event_id,
         title,                  // event_title
         start_date,
         end_date,
         event_location,
-        assigned_by_email,      // owner_name
+        assigned_by_email,
+        role_in_event || "Unknown",
+        business_name,
+        price_in_event || 0)
+      // Log before sending
+      console.log(`Preparing to send email to ${team_member_email} for role ${role_in_event}`);
+
+      // Send the email with individual params
+      await send_team_event_confirmation_email(
+        member_email = team_member_email,            // member_email
+        member_name,             // member_name
+        event_id,
+        title,                  // event_title
+        start_date,
+        end_date,
+        event_location,
+        assigned_by_email,
         role_in_event || "Unknown",
         business_name,
         price_in_event || 0
@@ -2229,6 +2242,7 @@ router.post("/add-service-request", (req, res) => {
   schedule.forEach((day, index) => {
     placeholders.push(`(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
+    console.log("location", day.location, "location link", day.location_link)
     insertValues.push(
       event_request_type || "service",
       event_name,
@@ -2427,6 +2441,7 @@ router.get("/get-equipment-details-by/:receiver_email", (req, res) => {
 
 router.post('/add_team_member_for_service', function (req, res) {
   const { user_email, title, start, end, description, backgroundColor, teamAssignments } = req.body;
+  console.log("this is request.body for add_team_member_for_service", teamAssignments);
 
   if (!title || !start || !end || !user_email) {
     return res.status(400).json({ error: "Title, start, end, and user_email are required." });
@@ -2437,7 +2452,7 @@ router.post('/add_team_member_for_service', function (req, res) {
   }
 
   const isValid = teamAssignments.every((member) => {
-    return member.member_id && member.assigned_by_email && member.start_date && member.end_date;
+    return member.member_id && member.assigned_by_email && member.start_date && member.end_date && member.price_in_event;
   });
 
   if (!isValid) {
@@ -2461,7 +2476,6 @@ router.post('/add_team_member_for_service', function (req, res) {
         return res.status(500).json({ error: "Failed to add event." });
       }
 
-      const event_id = eventResult.insertId;
       let completed = 0;
       let hasError = false;
 
@@ -2470,47 +2484,81 @@ router.post('/add_team_member_for_service', function (req, res) {
         return date.toISOString().slice(0, 19).replace('T', ' ');
       };
 
-      teamAssignments.forEach((member) => {
-        db.execute(
-          `INSERT INTO event_team_member 
-          (event_id, member_id, assigned_by_email, start_date, end_date, role_in_event, confirmation_status, confirmation_date, calender_id, price_in_event)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            member.event_id,
-            member.member_id,
-            member.assigned_by_email,
-            formatDate(member.start_date),
-            formatDate(member.end_date),
-            member.role_in_event || "Unknown",
-            "pending",
-            null,
-            null,
-            member.price_in_event || 0
-          ],
-          function (err2) {
-            if (hasError) return;
-            if (err2) {
-              hasError = true;
-              console.error("Error inserting team member:", err2);
-              return res.status(500).json({ error: "Failed to add team members." });
-            }
+      console.log("Start inserting in the event_team_member_table");
 
-            completed++;
-            if (completed === teamAssignments.length) {
-              // All inserts completed successfully, now send emails
-              notifyOwners(user_email, title, teamAssignments).then(() => {
-                res.status(201).json({ message: "Event and team members added successfully, notifications sent." });
-              }).catch(err => {
-                console.error("Error sending notifications:", err);
-                res.status(201).json({ message: "Event and team members added, but failed to send some notifications." });
-              });
+      const promises = teamAssignments.map((member) => {
+        return new Promise((resolve, reject) => {
+          db.execute(
+            `INSERT INTO event_team_member 
+            (event_id, member_id, assigned_by_email, start_date, end_date, role_in_event, confirmation_status, price_in_event, confirmation_date, calender_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              member.event_id, // Use member.event_id directly
+              member.member_id,
+              member.assigned_by_email,
+              formatDate(member.start_date),
+              formatDate(member.end_date),
+              member.role_in_event,
+              "pending",
+              parseFloat(member.price_in_event),
+              null,
+              null
+            ],
+            function (err2) {
+              if (err2) {
+                console.error("Error inserting team member:", err2);
+                reject(new Error("Failed to add team member."));
+                return;
+              }
+
+              console.log("member price", member.price_in_event, parseFloat(member.price_in_event));
+              completed++;
+
+              // Update event_request status for the member's event_id
+              db.execute(
+                `UPDATE event_request SET event_status = 'waiting on team' WHERE id = ?`,
+                [member.event_id], // Use member.event_id to update the correct event
+                function (err3) {
+                  if (err3) {
+                    console.error("Error updating event status for event_id:", member.event_id, err3);
+                    reject(new Error("Failed to update event status."));
+                    return;
+                  }
+
+                  console.log("Event status updated to 'waiting on team' for event_id:", member.event_id);
+
+                  if (completed === teamAssignments.length) {
+                    // Once all team members are inserted and event status updated, send notifications
+                    resolve();
+                  }
+                }
+              );
             }
-          }
-        );
+          );
+        });
       });
+
+      // Wait for all promises to resolve
+      Promise.all(promises)
+        .then(() => {
+          // Now call the notify function after all inserts have succeeded
+          notifyOwners(user_email, title, teamAssignments)
+            .then(() => {
+              res.status(201).json({ message: "Event and team members added successfully, notifications sent." });
+            })
+            .catch(err => {
+              console.error("Error sending notifications:", err);
+              res.status(201).json({ message: "Event and team members added, but failed to send some notifications." });
+            });
+        })
+        .catch(err => {
+          console.error("Error inserting members or updating statuses:", err);
+          res.status(500).json({ error: "Failed to add event or team members." });
+        });
     }
   );
 });
+
 
 router.get("/get_received_service_requests/:receiver_email", (req, res) => {
   const { receiver_email } = req.params;
@@ -2559,6 +2607,52 @@ router.get("/get_received_service_requests/:receiver_email", (req, res) => {
     }
   });
 });
+
+router.post("/service_and_team_member_details_fetcing", async (req, res) => {
+  const { ids } = req.body;
+  console.log("Received IDs:", ids);
+
+  try {
+    const finalResult = [];
+
+    for (const id of ids) {
+      const eventQuery = "SELECT * FROM event_request WHERE id = ?";
+      const [eventData] = await db.promise().query(eventQuery, [id]);
+
+      const teamLinkQuery = "SELECT * FROM event_team_member WHERE event_id = ?";
+      const [eventTeamMembers] = await db.promise().query(teamLinkQuery, [id]);
+
+      const memberIdsFromEvent = eventTeamMembers.map(row => row.member_id);
+
+      const otherMemberQuery = "SELECT member_id FROM event_team_member WHERE event_id = ?";
+      const [otherMembers] = await db.promise().query(otherMemberQuery, [id]);
+      const memberIdsFromOther = otherMembers.map(row => row.member_id);
+
+      const allMemberIds = [...new Set([...memberIdsFromEvent, ...memberIdsFromOther])];
+
+      let teamMemberDetails = [];
+      if (allMemberIds.length > 0) {
+        const placeholders = allMemberIds.map(() => '?').join(',');
+        const memberDetailQuery = `SELECT member_id, member_name, team_member_email FROM team_member WHERE member_id IN (${placeholders})`;
+        const [teamMembers] = await db.promise().query(memberDetailQuery, allMemberIds);
+        teamMemberDetails = teamMembers;
+      }
+
+      finalResult.push({
+        event_id: id,
+        event_data: eventData[0] || {},
+        event_team_members: eventTeamMembers,
+        team_member_details: teamMemberDetails
+      });
+    }
+
+    res.json({ success: true, data: finalResult });
+  } catch (error) {
+    console.error("Error fetching details:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 // Add a new service
 router.post("/add-service", (req, res) => {
   const { service_name, price_per_day, description, user_email } = req.body;
@@ -2933,7 +3027,6 @@ router.get("/update-Notification-is-seen/:notification_type", (req, res) => {
 
 
 
-// 
 
 
 router.post("/api/upload-photo", (req, res) => {

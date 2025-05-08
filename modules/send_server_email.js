@@ -241,7 +241,8 @@ async function send_team_event_confirmation_email(member_email, member_name, eve
             .replace(/{{business_name}}/g, business_name)
             .replace(/{{assigned_role}}/g, assigned_role)
             .replace(/{{accept_url}}/g, acceptUrl)
-            .replace(/{{reject_url}}/g, rejectUrl);
+            .replace(/{{reject_url}}/g, rejectUrl)
+            .replace(/{{payment_amount}}/g, payment_amount);
 
 
         await send_email(

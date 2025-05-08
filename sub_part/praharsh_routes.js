@@ -278,8 +278,7 @@ router.get("/get-sent-all-details-by/:sender_email", (req, res) => {
 router.get("/get-sent-service-requests-by/:user_email", (req, res) => {
   const { user_email } = req.params;
 
-  // Get only event_ids
-  const serviceQuery = "SELECT event_ids FROM multi_day_services WHERE sender_email = ?";
+  const serviceQuery = "SELECT id, event_ids FROM multi_day_services WHERE sender_email = ?";
 
   db.query(serviceQuery, [user_email], async (err, serviceResults) => {
     if (err) {
@@ -291,14 +290,15 @@ router.get("/get-sent-service-requests-by/:user_email", (req, res) => {
       return res.json({ service: [] });
     }
 
-    // Check each event_ids entry and collect event data
     try {
       const allEventData = await Promise.all(
         serviceResults.map(row => {
           return new Promise((resolve, reject) => {
             const ids = row.event_ids;
+            const multiServiceId = row.id;
+
             if (!Array.isArray(ids) || ids.length === 0) {
-              return resolve([]); // skip empty or invalid ids
+              return resolve([]);
             }
 
             const query = "SELECT * FROM event_request WHERE id IN (?)";
@@ -307,13 +307,19 @@ router.get("/get-sent-service-requests-by/:user_email", (req, res) => {
                 console.error("Error fetching event_request for ids:", ids, err);
                 return reject(err);
               }
-              resolve(result); // put the result in correct index
+
+              // Inject the multi_day_service id into each event_request object
+              const enrichedResults = result.map(event => ({
+                ...event,
+                multi_day_service_id: multiServiceId
+              }));
+
+              resolve(enrichedResults);
             });
           });
         })
       );
 
-      // Final output is array of arrays, each index has event_request rows
       res.json({ service: allEventData });
 
     } catch (e) {
@@ -322,6 +328,8 @@ router.get("/get-sent-service-requests-by/:user_email", (req, res) => {
     }
   });
 });
+
+
 router.post("/get_equpment_by_time", (req, res) => {
   const { equipment_id } = req.body;
 
