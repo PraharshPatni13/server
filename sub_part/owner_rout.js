@@ -501,7 +501,9 @@ router.put("/update-owner", (req, res) => {
   if (req.body.admin_message) updateData.admin_message = req.body.admin_message;
   if (req.body.set_status_by_admin)
     updateData.set_status_by_admin = req.body.set_status_by_admin;
-
+  if (req.body.skill) {
+    updateData.skill = req.body.skill;
+  }
   // Check if there is any data to update
   if (Object.keys(updateData).length === 0) {
     return res.status(400).json({ error: "No data provided to update." });
@@ -607,13 +609,13 @@ router.post("/update-status", async (req, res) => {
 });
 
 router.post("/update-owner", (req, res) => {
-  const { user_email, user_name, first_name, last_name, gender, social_media, business_address } =
+  const { user_email, user_name, first_name, last_name, gender, social_media, business_address, skill } =
     req.body;
 
-  const query = `UPDATE owner SET user_name = ?, first_name = ?, last_name = ?, gender = ?, social_media = ?, business_address = ? WHERE user_email = ?`;
+  const query = `UPDATE owner SET user_name = ?, first_name = ?, last_name = ?, gender = ?, social_media = ?, business_address = ?,skill=? WHERE user_email = ?`;
   db.query(
     query,
-    [user_name, first_name, last_name, gender, social_media, business_address, user_email],
+    [user_name, first_name, last_name, gender, social_media, business_address, user_email, skill],
     (err, result) => {
       if (err) {
         console.error("Error updating owner:", err);
