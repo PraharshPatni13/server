@@ -1366,6 +1366,37 @@ router.get("/event-confirmation/:event_id/:member_email/:action", async (req, re
   }
 });
 
+// check confirmation status for all team members
+router.post('/check-confirmation-status', async (req, res) => {
+  const { ids } = req.body;
+
+  // Validate that ids is an array
+  if (!Array.isArray(ids)) {
+    console.error('Invalid input: ids is not an array', ids);
+    return res.status(400).json({ error: 'Invalid input: ids must be an array' });
+  }
+
+  const statuses = [];
+
+  try {
+    for (const id of ids) {
+      const query = 'SELECT confirmation_status FROM event_team_member WHERE event_id = ?';
+      const [result] = await db.execute(query, [id]);
+      statuses.push(result.length > 0 ? result[0].confirmation_status : null);
+    }
+
+    console.log("this is the status to send ", statuses)
+    res.json(
+      statuses.includes('pending')
+        ? { status: 'pending' }
+        : { status: 'no_pending', statuses }
+    );
+  } catch (error) {
+    console.error('Error in /check-confirmation-status:', error.message, error.stack);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Add an endpoint to check event team confirmation status
 router.post("/check-event-team-status", async (req, res) => {
   const { event_id } = req.body;
