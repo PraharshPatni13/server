@@ -1433,14 +1433,9 @@ router.post('/validate-external-user', async (req, res) => {
         }
         
         // Compare passwords
-        const match = await bcrypt.compare(password, user.password);
+        const match = password === user.password;
         
         if (!match) {
-            // Log failed login attempt
-            await db.promise().query(
-                "INSERT INTO external_user_login_attempts (user_id, email, status, ip_address) VALUES (?, ?, ?, ?)",
-                [user.id, email, 'failed', req.ip || 'unknown']
-            ).catch(err => console.error("Error logging failed login:", err));
             
             return res.status(401).json({ error: "Invalid email or password" });
         }
@@ -1460,16 +1455,6 @@ router.post('/validate-external-user', async (req, res) => {
             [user.id]
         );
         
-        // Log successful login
-        try {
-            await db.promise().query(
-                "INSERT INTO external_user_login_attempts (user_id, email, status, ip_address) VALUES (?, ?, ?, ?)",
-                [user.id, email, 'success', req.ip || 'unknown']
-            );
-        } catch (logErr) {
-            console.error("Error logging successful login:", logErr);
-            // Continue even if logging fails
-        }
         
         res.status(200).json({
             message: "Login successful",
