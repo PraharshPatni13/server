@@ -299,13 +299,15 @@ router.post('/share_with_external', async (req, res) => {
             
             if (existingUsers.length === 0) {
                 // Hash password
+                const saltRounds = 10;
+                const hashedPassword = await bcrypt.hash(password, saltRounds);
                 
                 // Insert new external user
                 const insertUserSql = `
                     INSERT INTO external_users (username, email, password, created_by) 
                     VALUES (?, ?, ?, ?)`;
                 
-                await db.promise().query(insertUserSql, [username, email, password, shared_by]);
+                await db.promise().query(insertUserSql, [username, email, hashedPassword, shared_by]);
                 
                 if (send_notification) {
                     // Send welcome email with credentials
@@ -1425,12 +1427,21 @@ router.post('/validate-external-user', async (req, res) => {
         
         const user = users[0];
         
+        // Check if account is active
+        if (!user.is_active) {
+            return res.status(403).json({ error: "Your account is inactive. Please contact your administrator." });
+        }
+        
         // Compare passwords
-        console.log(password, user.password);
-        const match = password === user.password;
-
+        const match = await bcrypt.compare(password, user.password);
         
         if (!match) {
+            // Log failed login attempt
+            await db.promise().query(
+                "INSERT INTO external_user_login_attempts (user_id, email, status, ip_address) VALUES (?, ?, ?, ?)",
+                [user.id, email, 'failed', req.ip || 'unknown']
+            ).catch(err => console.error("Error logging failed login:", err));
+            
             return res.status(401).json({ error: "Invalid email or password" });
         }
         
@@ -1439,9 +1450,26 @@ router.post('/validate-external-user', async (req, res) => {
             id: user.id,
             username: user.username,
             email: user.email,
-            created_date: user.created_date
+            created_at: user.created_at,
+            created_by: user.created_by
         };
         
+        // Update last login time
+        await db.promise().query(
+            "UPDATE external_users SET last_login = NOW() WHERE id = ?",
+            [user.id]
+        );
+        
+        // Log successful login
+        try {
+            await db.promise().query(
+                "INSERT INTO external_user_login_attempts (user_id, email, status, ip_address) VALUES (?, ?, ?, ?)",
+                [user.id, email, 'success', req.ip || 'unknown']
+            );
+        } catch (logErr) {
+            console.error("Error logging successful login:", logErr);
+            // Continue even if logging fails
+        }
         
         res.status(200).json({
             message: "Login successful",
@@ -1465,12 +1493,17 @@ router.get('/external-user-items/:email', async (req, res) => {
     try {
         // Verify this is a valid external user
         const [users] = await db.promise().query(
-            "SELECT id FROM external_users WHERE email = ?",
+            "SELECT id, username, is_active FROM external_users WHERE email = ?",
             [email]
         );
         
         if (users.length === 0) {
             return res.status(404).json({ error: "External user not found" });
+        }
+        
+        // Check if user is active
+        if (!users[0].is_active) {
+            return res.status(403).json({ error: "Account is inactive. Please contact your administrator." });
         }
         
         // Get folders shared with this external user
@@ -1483,7 +1516,9 @@ router.get('/external-user-items/:email', async (req, res) => {
                 dfa.permission,
                 o.user_name AS owner_name,
                 o.user_email AS owner_email,
-                dfa.shared_date
+                dfa.id AS access_id,
+                f.is_shared,
+                f.is_starred
             FROM 
                 drive_file_access dfa
             JOIN 
@@ -1494,6 +1529,8 @@ router.get('/external-user-items/:email', async (req, res) => {
                 dfa.shared_with = ? 
                 AND dfa.is_external = 1
                 AND dfa.folder_id IS NOT NULL
+            ORDER BY 
+                f.modified_date DESC
         `, [email]);
         
         // Get files shared with this external user
@@ -1508,7 +1545,9 @@ router.get('/external-user-items/:email', async (req, res) => {
                 dfa.permission,
                 o.user_name AS owner_name,
                 o.user_email AS owner_email,
-                dfa.shared_date
+                dfa.id AS access_id,
+                f.is_shared,
+                f.is_starred
             FROM 
                 drive_file_access dfa
             JOIN 
@@ -1519,7 +1558,15 @@ router.get('/external-user-items/:email', async (req, res) => {
                 dfa.shared_with = ? 
                 AND dfa.is_external = 1
                 AND dfa.file_id IS NOT NULL
+            ORDER BY 
+                f.modified_date DESC
         `, [email]);
+        
+        // Update the last_login time for the external user
+        await db.promise().query(
+            "UPDATE external_users SET last_login = NOW() WHERE email = ?",
+            [email]
+        );
         
         // Return the shared items
         res.status(200).json({
