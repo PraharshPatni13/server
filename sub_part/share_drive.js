@@ -915,9 +915,24 @@ router.post('/get-current-shares', async (req, res) => {
         const [publicResult] = await db.promise().query(publicSql, [item_id]);
         const isPublic = publicResult.length > 0 && publicResult[0].shared_public === 1;
         
+        // If public, get the current public permission
+        let publicPermission = null;
+        if (isPublic) {
+            const publicPermSql = `
+                SELECT permission FROM drive_file_access
+                WHERE ${item_type === 'folder' ? 'folder_id' : 'file_id'} = ?
+                AND shared_public = 1`;
+                
+            const [publicPermResult] = await db.promise().query(publicPermSql, [item_id]);
+            if (publicPermResult.length > 0) {
+                publicPermission = publicPermResult[0].permission;
+            }
+        }
+        
         res.json({
             current_shares: currentShares,
-            is_public: isPublic
+            is_public: isPublic,
+            public_permission: publicPermission
         });
         
     } catch (error) {

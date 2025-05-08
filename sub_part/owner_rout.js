@@ -2612,37 +2612,40 @@ router.post("/service_and_team_member_details_fetcing", async (req, res) => {
   const { ids } = req.body;
   console.log("Received IDs:", ids);
 
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ success: false, message: "Invalid or empty ID list" });
+  }
+
   try {
     const finalResult = [];
 
     for (const id of ids) {
-      const eventQuery = "SELECT * FROM event_request WHERE id = ?";
-      const [eventData] = await db.promise().query(eventQuery, [id]);
+      // Get event data
+      const [[eventData = {}]] = await db.promise().query(
+        "SELECT * FROM event_request WHERE id = ?",
+        [id]
+      );
 
-      const teamLinkQuery = "SELECT * FROM event_team_member WHERE event_id = ?";
-      const [eventTeamMembers] = await db.promise().query(teamLinkQuery, [id]);
+      // Get first matching team member row
+      const [[eventTeamMember = {}]] = await db.promise().query(
+        "SELECT * FROM event_team_member WHERE event_id = ? LIMIT 1",
+        [id]
+      );
 
-      const memberIdsFromEvent = eventTeamMembers.map(row => row.member_id);
-
-      const otherMemberQuery = "SELECT member_id FROM event_team_member WHERE event_id = ?";
-      const [otherMembers] = await db.promise().query(otherMemberQuery, [id]);
-      const memberIdsFromOther = otherMembers.map(row => row.member_id);
-
-      const allMemberIds = [...new Set([...memberIdsFromEvent, ...memberIdsFromOther])];
-
-      let teamMemberDetails = [];
-      if (allMemberIds.length > 0) {
-        const placeholders = allMemberIds.map(() => '?').join(',');
-        const memberDetailQuery = `SELECT member_id, member_name, team_member_email FROM team_member WHERE member_id IN (${placeholders})`;
-        const [teamMembers] = await db.promise().query(memberDetailQuery, allMemberIds);
-        teamMemberDetails = teamMembers;
+      let teamMemberDetail = {};
+      if (eventTeamMember.member_id) {
+        const [[memberDetail = {}]] = await db.promise().query(
+          "SELECT member_id, member_name, team_member_email FROM team_member WHERE member_id = ?",
+          [eventTeamMember.member_id]
+        );
+        teamMemberDetail = memberDetail;
       }
 
       finalResult.push({
         event_id: id,
-        event_data: eventData[0] || {},
-        event_team_members: eventTeamMembers,
-        team_member_details: teamMemberDetails
+        event_data: eventData,
+        event_team_members: eventTeamMember,
+        team_member_details: teamMemberDetail
       });
     }
 
@@ -2652,6 +2655,7 @@ router.post("/service_and_team_member_details_fetcing", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
+
 
 // Add a new service
 router.post("/add-service", (req, res) => {
