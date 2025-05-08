@@ -2113,4 +2113,41 @@ router.post("/get_file_folder_details", (req, res) => {
     });
 });
 
+
+router.post("/get_drive_limit", (req, res) => {
+    const { user_email } = req.body;
+    const query = `SELECT drive_limit FROM owner WHERE user_email = ?`;
+    db.query(query, [user_email], (err, results) => {
+        if(err){
+            return res.status(500).json({ error: 'Database error' });
+        }
+        if (results && results.length > 0 && results[0].drive_limit) {
+            res.json({
+                drive_limit: results[0].drive_limit,
+                source: 'database'
+            });
+        } else {
+            const defaultLimit = process.env.DRIVE_limit;
+            res.json({
+                drive_limit: defaultLimit,
+                source: 'default'
+            });
+        }
+    });
+});
+
+
+router.post("/set_drive_limit_by_admin", (req, res) => {
+    const { user_email, drive_limit } = req.body;
+    //set - "1GB", "1TB", "unlimited"
+    const query = `UPDATE owner SET drive_limit = ? WHERE user_email = ?`;
+    db.query(query, [drive_limit, user_email], (err, results) => {
+        if(err){
+            return res.status(500).json({ error: 'Database error' });
+        }
+        res.json({ message: 'Drive limit updated successfully' });
+    });
+});
+
+
 module.exports = router;
