@@ -1083,7 +1083,7 @@ router.post("/add-team-members", async (req, res) => {
       } else if (event.event_request_type === 'service') {
         event_title = event.service_name;
       } else if (event.event_request_type === 'equipment') {
-        event_title = event.event_name;
+        event_title = event.equipment_name || event.event_name;
       }
 
       if (memberData.length > 0 && memberData[0].team_member_email) {
@@ -1669,34 +1669,106 @@ router.post("/get-event-team-members", (req, res) => {
   });
 });
 
-router.post("/business_related_details", (req, res) => {
+router.post("/business_related_details", async (req, res) => {
   const { member_id } = req.body;
 
-  const eventTeamMemberQuery = "SELECT * FROM event_team_member WHERE member_id = ? AND confirmation_status = ?";
-  db.query(eventTeamMemberQuery, [member_id, "Accepted"], (err, eventTeamResult) => {
-    if (err) {
-      console.error("Error running query on event_team_member table:", err);
-      return res.status(500).json({ error: "Database query error" });
+  if (!member_id) {
+    return res.status(400).json({ error: "Member ID is required" });
+  }
+
+  try {
+    // Get team member info
+    const memberQuery = "SELECT member_name, member_role, team_member_email FROM team_member WHERE member_id = ?";
+    const [memberResult] = await db.promise().query(memberQuery, [member_id]);
+    
+    if (memberResult.length === 0) {
+      return res.status(404).json({ error: "Team member not found" });
     }
 
-    if (eventTeamResult.length === 0) {
-      return res.status(200).json({ message: "No accepted events found", data: [] });
-    }
+    const memberInfo = memberResult[0];
 
-    const eventIds = eventTeamResult.map(row => row.event_id);
-
-    const placeholders = eventIds.map(() => '?').join(', ');
-    const eventRequestQuery = `SELECT * FROM event_request WHERE id IN (${placeholders})`;
-
-    db.query(eventRequestQuery, eventIds, (err, eventRequestResults) => {
-      if (err) {
-        console.error("Error running query on event_request table:", err);
-        return res.status(500).json({ error: "Database query error" });
+    // Get all accepted events for this team member
+    const eventsQuery = `
+      SELECT etm.*, er.* 
+      FROM event_team_member etm
+      JOIN event_request er ON etm.event_id = er.id
+      WHERE etm.member_id = ? AND etm.confirmation_status = 'Accepted'
+      ORDER BY er.start_date DESC
+    `;
+    
+    const [eventsResult] = await db.promise().query(eventsQuery, [member_id]);
+    
+    // Format event data for better frontend consumption
+    const formattedEvents = eventsResult.map(event => {
+      let eventTitle;
+      if (event.event_request_type === 'package') {
+        eventTitle = event.package_name;
+      } else if (event.event_request_type === 'service') {
+        eventTitle = event.service_name;
+      } else if (event.event_request_type === 'equipment') {
+        eventTitle = event.equipment_name || event.event_name;
       }
-
-      res.status(200).json({ teamData: eventTeamResult, eventDetails: eventRequestResults });
+      
+      return {
+        event_id: event.event_id,
+        title: eventTitle,
+        type: event.event_request_type,
+        start_date: event.start_date,
+        end_date: event.end_date,
+        formatted_start: formatDateTime(event.start_date),
+        formatted_end: formatDateTime(event.end_date),
+        location: event.location,
+        client_name: event.client_name,
+        client_email: event.sender_email,
+        requirements: event.requirements,
+        confirmation_date: event.confirmation_date,
+        role_in_event: event.role_in_event,
+        status: event.event_status,
+        is_completed: ['Completed', 'Event Expired'].includes(event.event_status)
+      };
     });
-  });
+
+    // Get stats
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_events,
+        SUM(CASE WHEN er.event_status = 'Completed' THEN 1 ELSE 0 END) as completed_events,
+        SUM(CASE WHEN er.event_status IN ('Accepted', 'Waiting on Team') THEN 1 ELSE 0 END) as upcoming_events,
+        MIN(er.start_date) as first_event_date
+      FROM event_team_member etm
+      JOIN event_request er ON etm.event_id = er.id
+      WHERE etm.member_id = ? AND etm.confirmation_status = 'Accepted'
+    `;
+    
+    const [statsResult] = await db.promise().query(statsQuery, [member_id]);
+    const stats = statsResult[0];
+    
+    // Calculate days as team member
+    let daysAsTeamMember = 0;
+    if (stats.first_event_date) {
+      const firstDate = new Date(stats.first_event_date);
+      const today = new Date();
+      daysAsTeamMember = Math.floor((today - firstDate) / (1000 * 60 * 60 * 24));
+    }
+    
+    // Return comprehensive data
+    res.status(200).json({
+      member: memberInfo,
+      stats: {
+        total_events: stats.total_events || 0,
+        completed_events: stats.completed_events || 0,
+        upcoming_events: stats.upcoming_events || 0,
+        days_as_team_member: daysAsTeamMember
+      },
+      upcoming_events: formattedEvents.filter(e => !e.is_completed),
+      past_events: formattedEvents.filter(e => e.is_completed),
+      all_events: formattedEvents
+    });
+    
+  } catch (error) {
+    console.error("Error fetching business details:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
+  }
 });
 
 // Route to check for events that have ended and update their status
