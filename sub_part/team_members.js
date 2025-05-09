@@ -1668,13 +1668,13 @@ router.post("/get-event-team-members", (req, res) => {
     }
   });
 });
-function formatDateToReadable(dateString,is_start_date = true) {
+function formatDateToReadable(dateString) {
   const date = new Date(dateString);
   const day = date.getDate(); // 1 - 31
   const month = date.toLocaleString('default', { month: 'long' }); // "January" to "December"
   const year = date.getFullYear(); // 4-digit year
 
-  return is_start_date ? `Starts on ${day} ${month} ${year}` : `Ends on ${day} ${month} ${year}`;
+  return `on ${day} ${month} ${year}`;
 }
 
 router.post("/business_related_details", async (req, res) => {
@@ -1697,7 +1697,7 @@ router.post("/business_related_details", async (req, res) => {
 
     // Get all accepted events for this team member
     const eventsQuery = `
-      SELECT etm.*, er.* 
+      SELECT etm.*, etm.price_in_event as member_payment, er.* 
       FROM event_team_member etm
       JOIN event_request er ON etm.event_id = er.id
       WHERE etm.member_id = ? AND etm.confirmation_status = 'Accepted'
@@ -1705,6 +1705,11 @@ router.post("/business_related_details", async (req, res) => {
     `;
     
     const [eventsResult] = await db.promise().query(eventsQuery, [member_id]);
+    
+    // Calculate total earnings
+    let totalEarnings = 0;
+    let completedEarnings = 0;
+    let upcomingEarnings = 0;
     
     // Format event data for better frontend consumption
     const formattedEvents = eventsResult.map(event => {
@@ -1717,14 +1722,28 @@ router.post("/business_related_details", async (req, res) => {
         eventTitle = event.equipment_name || event.event_name;
       }
       
+      // Calculate payment amount - use price_in_event if available, otherwise use a percentage of total_amount
+      const paymentAmount = event.member_payment || 0;
+      
+      // Add to total earnings
+      totalEarnings += paymentAmount;
+      
+      // Track earnings by event status
+      const isCompleted = ['Completed', 'Event Expired'].includes(event.event_status);
+      if (isCompleted) {
+        completedEarnings += paymentAmount;
+      } else {
+        upcomingEarnings += paymentAmount;
+      }
+      
       return {
         event_id: event.event_id,
         title: eventTitle,
         type: event.event_request_type,
         start_date: event.start_date,
         end_date: event.end_date,
-        formatted_start: formatDateToReadable(event.start_date,true),
-        formatted_end: formatDateToReadable(event.end_date,false),
+        formatted_start: formatDateToReadable(event.start_date),
+        formatted_end: formatDateToReadable(event.end_date),
         location: event.location,
         client_name: event.client_name,
         client_email: event.sender_email,
@@ -1732,6 +1751,7 @@ router.post("/business_related_details", async (req, res) => {
         confirmation_date: event.confirmation_date,
         role_in_event: event.role_in_event,
         status: event.event_status,
+        payment: paymentAmount,
         is_completed: ['Completed', 'Event Expired'].includes(event.event_status)
       };
     });
@@ -1766,7 +1786,10 @@ router.post("/business_related_details", async (req, res) => {
         total_events: stats.total_events || 0,
         completed_events: stats.completed_events || 0,
         upcoming_events: stats.upcoming_events || 0,
-        days_as_team_member: daysAsTeamMember
+        days_as_team_member: daysAsTeamMember,
+        total_earnings: totalEarnings,
+        completed_earnings: completedEarnings,
+        upcoming_earnings: upcomingEarnings
       },
       upcoming_events: formattedEvents.filter(e => !e.is_completed),
       past_events: formattedEvents.filter(e => e.is_completed),
