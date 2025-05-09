@@ -1668,6 +1668,14 @@ router.post("/get-event-team-members", (req, res) => {
     }
   });
 });
+function formatDateToReadable(dateString,is_start_date = true) {
+  const date = new Date(dateString);
+  const day = date.getDate(); // 1 - 31
+  const month = date.toLocaleString('default', { month: 'long' }); // "January" to "December"
+  const year = date.getFullYear(); // 4-digit year
+
+  return is_start_date ? `Starts on ${day} ${month} ${year}` : `Ends on ${day} ${month} ${year}`;
+}
 
 router.post("/business_related_details", async (req, res) => {
   const { member_id } = req.body;
@@ -1715,8 +1723,8 @@ router.post("/business_related_details", async (req, res) => {
         type: event.event_request_type,
         start_date: event.start_date,
         end_date: event.end_date,
-        formatted_start: formatDateTime(event.start_date),
-        formatted_end: formatDateTime(event.end_date),
+        formatted_start: formatDateToReadable(event.start_date,true),
+        formatted_end: formatDateToReadable(event.end_date,false),
         location: event.location,
         client_name: event.client_name,
         client_email: event.sender_email,
