@@ -6,6 +6,7 @@ const path = require('path');
 const util = require('util');
 const crypto = require('crypto');
 const busboy = require('busboy');
+const sharp = require('sharp');
 
 require('dotenv').config();
 
@@ -16,6 +17,12 @@ const rootDirectory = path.join(__dirname, "..", "root");
 // Create root directory if it doesn't exist
 if (!fs.existsSync(rootDirectory)) {
     fs.mkdirSync(rootDirectory, { recursive: true });
+}
+
+// Create thumbnail directory if it doesn't exist
+const thumbnailDir = path.join(rootDirectory, 'thumbnails');
+if (!fs.existsSync(thumbnailDir)) {
+    fs.mkdirSync(thumbnailDir, { recursive: true });
 }
 
 const db = mysql.createConnection({
@@ -2149,5 +2156,102 @@ router.post("/set_drive_limit_by_admin", (req, res) => {
     });
 });
 
+// Add thumbnail generation functionality
+router.get('/thumbnail/:fileId', async (req, res) => {
+    const { fileId } = req.params;
+    const { width = 200, height = 200 } = req.query;
+    const { user_email } = req.query;
+    
+    if (!fileId) {
+        return res.status(400).send('File ID is required');
+    }
+
+    try {
+        // Get file info from database
+        const query = `SELECT * FROM drive_files WHERE file_id = ?`;
+        
+        db.query(query, [fileId], async (err, results) => {
+            if (err) {
+                console.error('Error fetching file info:', err);
+                return res.status(500).send('Database error');
+            }
+            
+            if (results.length === 0) {
+                return res.status(404).send('File not found');
+            }
+            
+            const fileData = results[0];
+            const filePath = fileData.file_path;
+            const fileType = path.extname(fileData.file_name).toLowerCase();
+            
+            // Only process image files
+            const supportedTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+            if (!supportedTypes.includes(fileType)) {
+                // For non-image files, return a generic icon based on file type
+                return res.redirect('/icons/file-icon.png'); // Adjust path to your file icons
+            }
+            
+            // Create a unique thumbnail filename
+            const thumbFilename = `thumb_${fileId}_${width}x${height}${fileType}`;
+            const thumbPath = path.join(thumbnailDir, thumbFilename);
+            
+            // Check if thumbnail already exists
+            if (fs.existsSync(thumbPath)) {
+                return res.sendFile(thumbPath);
+            }
+            
+            // Check if source file exists
+            if (!fs.existsSync(filePath)) {
+                console.error(`Source file not found: ${filePath}`);
+                return res.status(404).send('Source file not found');
+            }
+            
+            // Generate thumbnail
+            await sharp(filePath)
+                .resize(parseInt(width), parseInt(height), {
+                    fit: 'cover',
+                    position: 'center'
+                })
+                .toFile(thumbPath);
+                
+            // Send the thumbnail
+            res.sendFile(thumbPath);
+        });
+    } catch (error) {
+        console.error('Error generating thumbnail:', error);
+        res.status(500).send(`Error generating thumbnail: ${error.message}`);
+    }
+});
+
+// Get file type icon for non-image files
+router.get('/file-icon/:type', (req, res) => {
+    const { type } = req.params;
+    
+    // Map file extensions to icon files
+    const iconMap = {
+        pdf: 'pdf-icon.png',
+        doc: 'doc-icon.png',
+        docx: 'doc-icon.png',
+        xls: 'excel-icon.png',
+        xlsx: 'excel-icon.png',
+        ppt: 'ppt-icon.png',
+        pptx: 'ppt-icon.png',
+        txt: 'text-icon.png',
+        zip: 'zip-icon.png',
+        rar: 'zip-icon.png',
+        // Add more mappings as needed
+        default: 'file-icon.png'
+    };
+    
+    const iconFile = iconMap[type] || iconMap.default;
+    const iconPath = path.join(__dirname, '..', 'public', 'icons', iconFile);
+    
+    // Check if icon exists, otherwise send default
+    if (fs.existsSync(iconPath)) {
+        res.sendFile(iconPath);
+    } else {
+        res.sendFile(path.join(__dirname, '..', 'public', 'icons', 'file-icon.png'));
+    }
+});
 
 module.exports = router;
