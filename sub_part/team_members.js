@@ -1669,6 +1669,36 @@ router.post("/get-event-team-members", (req, res) => {
   });
 });
 
+router.post("/business_related_details", (req, res) => {
+  const { member_id } = req.body;
+
+  const eventTeamMemberQuery = "SELECT * FROM event_team_member WHERE member_id = ? AND confirmation_status = ?";
+  db.query(eventTeamMemberQuery, [member_id, "Accepted"], (err, eventTeamResult) => {
+    if (err) {
+      console.error("Error running query on event_team_member table:", err);
+      return res.status(500).json({ error: "Database query error" });
+    }
+
+    if (eventTeamResult.length === 0) {
+      return res.status(200).json({ message: "No accepted events found", data: [] });
+    }
+
+    const eventIds = eventTeamResult.map(row => row.event_id);
+
+    const placeholders = eventIds.map(() => '?').join(', ');
+    const eventRequestQuery = `SELECT * FROM event_request WHERE id IN (${placeholders})`;
+
+    db.query(eventRequestQuery, eventIds, (err, eventRequestResults) => {
+      if (err) {
+        console.error("Error running query on event_request table:", err);
+        return res.status(500).json({ error: "Database query error" });
+      }
+
+      res.status(200).json({ teamData: eventTeamResult, eventDetails: eventRequestResults });
+    });
+  });
+});
+
 // Route to check for events that have ended and update their status
 router.get("/check-past-events/:user_email", async (req, res) => {
   const { user_email } = req.params;
